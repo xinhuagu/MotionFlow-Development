@@ -2,7 +2,7 @@
 
 **Reshaping the Future of Software Development**
 
-A spatial orchestrator that transforms your hands into a conductor's baton. Direct file operations, navigate codebases, and edit files through intuitive gestures — your workspace responds to your every movement.
+A spatial file system interface powered by hand gesture recognition. Navigate, browse, and edit code using natural hand movements — no mouse or keyboard required.
 
 > Built with AI-assisted development using Claude Code & Google Gemini
 
