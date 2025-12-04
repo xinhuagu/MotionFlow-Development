@@ -88,6 +88,32 @@ export default function App() {
         setIsZoomLocked(detail === 'LOCKED');
     } else if (action === 'NAVIGATE') {
         handleLog(`${action}: ${detail}`, 'cmd');
+    } else if (action === 'CREATE_FILE' && detail) {
+        // Create a new file in the current folder
+        const parentId = detail === 'root' ? null : detail;
+        const newFileId = `file_${Date.now()}`;
+        const existingFiles = files.filter(f => f.parentId === parentId && f.name.startsWith('untitled'));
+        const newFileName = existingFiles.length === 0 ? 'untitled.txt' : `untitled_${existingFiles.length + 1}.txt`;
+
+        const newFile = {
+            id: newFileId,
+            name: newFileName,
+            type: 'file' as const,
+            parentId: parentId,
+            content: '// New file created with gesture\n'
+        };
+
+        setFiles(prev => [...prev, newFile]);
+        handleLog(`Created new file: ${newFileName}`, 'success');
+
+        // Automatically open the new file
+        setActiveFile({
+            id: newFileId,
+            name: newFileName,
+            content: newFile.content
+        });
+        setZoomLevel(14);
+        setIsZoomLocked(false);
     } else {
        handleLog(`${action}: ${detail}`, 'cmd');
     }

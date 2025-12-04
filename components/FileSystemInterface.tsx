@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { NormalizedLandmark } from '@mediapipe/tasks-vision';
-import { FileCode, Folder, Server, CornerLeftUp, Hand } from 'lucide-react';
+import { FileCode, Folder, Server, CornerLeftUp, Hand, FilePlus } from 'lucide-react';
 import { FILES_DB } from '../constants';
 
 interface FileSystemInterfaceProps {
@@ -18,9 +18,11 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
   const [activationProgress, setActivationProgress] = useState(0); // 0 to 100
   
   // File Action Progress States
-  const [closeProgress, setCloseProgress] = useState(0); 
+  const [closeProgress, setCloseProgress] = useState(0);
   const [saveProgress, setSaveProgress] = useState(0);
   const [revertProgress, setRevertProgress] = useState(0);
+  const [createFileProgress, setCreateFileProgress] = useState(0);
+  const [fingerTouchPos, setFingerTouchPos] = useState<{x: number, y: number} | null>(null);
   
   const [draggedFileId, setDraggedFileId] = useState<string | null>(null);
   const [floatingFile, setFloatingFile] = useState<{id: string, x: number, y: number, scale: number} | null>(null);
@@ -34,7 +36,8 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     closeStartTime: 0,
     saveStartTime: 0,
     revertStartTime: 0,
-    triggerStartTime: 0, 
+    triggerStartTime: 0,
+    createFileStartTime: 0,
     lastHoverId: null as string | null,
     // Drag Hysteresis State
     pinchStartX: 0,
@@ -225,6 +228,45 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
 
     const cursorX = stateRef.current.cursorX;
     const cursorY = stateRef.current.cursorY;
+
+    // --- 1.5 TWO-FINGER TOUCH DETECTION (Create New File) ---
+    if (landmarks.length >= 2 && !floatingFile) {
+      const hand1IndexTip = landmarks[0][8];
+      const hand2IndexTip = landmarks[1][8];
+      const fingerDistance = getDistance(hand1IndexTip, hand2IndexTip);
+      const TOUCH_THRESHOLD = 0.05;
+
+      if (fingerDistance < TOUCH_THRESHOLD) {
+        // Calculate touch position (midpoint between two fingers)
+        const touchX = ((1 - hand1IndexTip.x) + (1 - hand2IndexTip.x)) / 2 * rect.width;
+        const touchY = (hand1IndexTip.y + hand2IndexTip.y) / 2 * rect.height;
+        setFingerTouchPos({ x: touchX, y: touchY });
+
+        if (stateRef.current.createFileStartTime === 0) {
+          stateRef.current.createFileStartTime = now;
+        }
+
+        const elapsed = now - stateRef.current.createFileStartTime;
+        const progress = Math.min(100, (elapsed / 1000) * 100); // 1s hold
+        setCreateFileProgress(progress);
+
+        if (progress >= 100) {
+          // Trigger create file action with current folder ID
+          onAction?.("CREATE_FILE", currentFolderId || 'root');
+          setCreateFileProgress(0);
+          setFingerTouchPos(null);
+          stateRef.current.createFileStartTime = now + 2000; // Cooldown
+        }
+      } else {
+        setCreateFileProgress(0);
+        setFingerTouchPos(null);
+        stateRef.current.createFileStartTime = 0;
+      }
+    } else {
+      setCreateFileProgress(0);
+      setFingerTouchPos(null);
+      stateRef.current.createFileStartTime = 0;
+    }
 
     // --- 2. HIT TEST ---
     let hitId: string | null = null;
@@ -576,6 +618,45 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
                🖐️ HOLDING FOR OPEN...
              </div>
            )}
+        </div>
+      )}
+
+      {/* Create File Touch Indicator */}
+      {fingerTouchPos && createFileProgress > 0 && (
+        <div
+          className="absolute z-50 flex flex-col items-center justify-center pointer-events-none"
+          style={{
+            left: fingerTouchPos.x,
+            top: fingerTouchPos.y,
+            transform: 'translate(-50%, -50%)'
+          }}
+        >
+          <div className="relative w-20 h-20 flex items-center justify-center">
+            {/* Progress Ring */}
+            <svg className="absolute w-full h-full -rotate-90">
+              <circle
+                cx="40" cy="40" r="36"
+                fill="none"
+                stroke="rgba(34, 211, 238, 0.2)"
+                strokeWidth="4"
+              />
+              <circle
+                cx="40" cy="40" r="36"
+                fill="none"
+                stroke="#22d3ee"
+                strokeWidth="4"
+                strokeDasharray={2 * Math.PI * 36}
+                strokeDashoffset={2 * Math.PI * 36 * (1 - createFileProgress / 100)}
+                strokeLinecap="round"
+                className="transition-all duration-75"
+              />
+            </svg>
+            {/* Icon */}
+            <FilePlus size={28} className="text-cyan-400 animate-pulse" />
+          </div>
+          <div className="mt-2 bg-cyan-500 text-black font-bold text-[10px] px-3 py-1 rounded-full whitespace-nowrap">
+            CREATING NEW FILE...
+          </div>
         </div>
       )}
 
