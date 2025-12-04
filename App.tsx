@@ -6,7 +6,7 @@ import { Terminal } from './components/Terminal';
 import { StatusPanel } from './components/StatusPanel';
 import { FileSystemInterface } from './components/FileSystemInterface';
 import { LogEntry } from './types';
-import { Power, ChevronRight, Hand, MousePointer2, X, FileText, Save, ZoomIn, Lock, MoveHorizontal, RotateCcw, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { Power, ChevronRight, Hand, MousePointer2, X, FileText, Save, ZoomIn, Lock, MoveHorizontal, RotateCcw, ThumbsDown, ThumbsUp, Edit2 } from 'lucide-react';
 import { FILES_DB } from './constants';
 
 export default function App() {
@@ -22,6 +22,10 @@ export default function App() {
   const [isReverting, setIsReverting] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(14); // Font Size in PX
   const [isZoomLocked, setIsZoomLocked] = useState(false);
+
+  // Rename File State
+  const [renamingFile, setRenamingFile] = useState<{id: string, name: string} | null>(null);
+  const [newFileName, setNewFileName] = useState('');
 
   const handleLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
     setLogs(prev => [...prev, {
@@ -93,27 +97,49 @@ export default function App() {
         const parentId = detail === 'root' ? null : detail;
         const newFileId = `file_${Date.now()}`;
         const existingFiles = files.filter(f => f.parentId === parentId && f.name.startsWith('untitled'));
-        const newFileName = existingFiles.length === 0 ? 'untitled.txt' : `untitled_${existingFiles.length + 1}.txt`;
+        const newFileNameStr = existingFiles.length === 0 ? 'untitled.txt' : `untitled_${existingFiles.length + 1}.txt`;
 
         const newFile = {
             id: newFileId,
-            name: newFileName,
+            name: newFileNameStr,
             type: 'file' as const,
             parentId: parentId,
             content: '// New file created with gesture\n'
         };
 
         setFiles(prev => [...prev, newFile]);
-        handleLog(`Created new file: ${newFileName}`, 'success');
+        handleLog(`Created new file: ${newFileNameStr}`, 'success');
 
         // Automatically open the new file
         setActiveFile({
             id: newFileId,
-            name: newFileName,
+            name: newFileNameStr,
             content: newFile.content
         });
         setZoomLevel(14);
         setIsZoomLocked(false);
+    } else if (action === 'RENAME_FILE' && detail) {
+        try {
+            const fileData = JSON.parse(detail);
+            setRenamingFile(fileData);
+            setNewFileName(fileData.name);
+            handleLog(`Renaming ${fileData.name}...`, 'info');
+        } catch (e) {
+            handleLog(`Error opening rename dialog: ${e}`, 'error');
+        }
+    } else if (action === 'CONFIRM_RENAME') {
+        if (renamingFile && newFileName.trim()) {
+            setFiles(prev => prev.map(f =>
+                f.id === renamingFile.id ? { ...f, name: newFileName.trim() } : f
+            ));
+            handleLog(`Renamed to ${newFileName.trim()}`, 'success');
+        }
+        setRenamingFile(null);
+        setNewFileName('');
+    } else if (action === 'CANCEL_RENAME') {
+        setRenamingFile(null);
+        setNewFileName('');
+        handleLog('Rename cancelled', 'warning');
     } else {
        handleLog(`${action}: ${detail}`, 'cmd');
     }
@@ -194,6 +220,7 @@ export default function App() {
                  containerRef={hudContainerRef}
                  onAction={handleFileSystemAction}
                  isFileOpen={!!activeFile}
+                 isRenaming={!!renamingFile}
                  files={files}
                />
              )}
@@ -262,6 +289,64 @@ export default function App() {
                                 <span>FIST CLOSE</span>
                             </div>
                          </div>
+                     </div>
+                  </div>
+               </div>
+             )}
+
+             {/* RENAME FILE MODAL */}
+             {renamingFile && (
+               <div className="absolute inset-0 z-[70] flex items-center justify-center p-8 bg-black/60 backdrop-blur-sm animate-in zoom-in-95 duration-200">
+                  <div className="w-full max-w-md bg-neutral-900/95 backdrop-blur-md border border-amber-500/50 rounded-lg shadow-2xl flex flex-col overflow-hidden">
+                     {/* Modal Header */}
+                     <div className="h-12 flex-none bg-black/30 border-b border-amber-900/30 flex items-center justify-between px-4">
+                        <div className="flex items-center gap-2 text-amber-400">
+                           <Edit2 size={16} />
+                           <span className="font-mono text-sm font-bold">RENAME FILE</span>
+                        </div>
+                        <button
+                          onClick={() => { setRenamingFile(null); setNewFileName(''); handleLog('Rename cancelled', 'warning'); }}
+                          className="hover:bg-red-500/20 hover:text-red-400 p-1 rounded transition-colors"
+                        >
+                          <X size={16} />
+                        </button>
+                     </div>
+
+                     {/* Input Section */}
+                     <div className="p-6 flex flex-col gap-4">
+                        <div className="text-sm text-neutral-400">
+                          Current name: <span className="text-white font-mono">{renamingFile.name}</span>
+                        </div>
+                        <input
+                          type="text"
+                          value={newFileName}
+                          onChange={e => setNewFileName(e.target.value)}
+                          className="w-full bg-black/50 border border-amber-500/30 rounded-lg px-4 py-3 text-white font-mono text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                          placeholder="Enter new file name..."
+                          autoFocus
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && newFileName.trim()) {
+                              handleFileSystemAction('CONFIRM_RENAME');
+                            } else if (e.key === 'Escape') {
+                              handleFileSystemAction('CANCEL_RENAME');
+                            }
+                          }}
+                        />
+                     </div>
+
+                     {/* Footer with gesture hints */}
+                     <div className="h-10 flex-none bg-black/30 border-t border-amber-900/30 flex items-center justify-between px-4 text-[10px] text-neutral-400 font-mono">
+                        <div className="flex items-center gap-4">
+                           <div className="flex items-center gap-1 text-cyan-400">
+                              <ThumbsUp size={10} />
+                              <span>THUMB UP SAVE</span>
+                           </div>
+                           <div className="flex items-center gap-1 text-red-400">
+                              <RotateCcw size={10} />
+                              <span>FIST CANCEL</span>
+                           </div>
+                        </div>
+                        <span className="text-neutral-500">or use keyboard: Enter / Esc</span>
                      </div>
                   </div>
                </div>

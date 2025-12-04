@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { NormalizedLandmark } from '@mediapipe/tasks-vision';
-import { FileCode, Folder, Server, CornerLeftUp, Hand, FilePlus } from 'lucide-react';
+import { FileCode, Folder, Server, CornerLeftUp, Hand, FilePlus, Edit2 } from 'lucide-react';
 
 interface FileItem {
   id: string;
@@ -17,10 +17,11 @@ interface FileSystemInterfaceProps {
   containerRef: React.RefObject<HTMLDivElement>;
   onAction?: (action: string, detail?: string) => void;
   isFileOpen: boolean;
+  isRenaming: boolean;
   files: FileItem[];
 }
 
-export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landmarks, gestures, containerRef, onAction, isFileOpen, files }) => {
+export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landmarks, gestures, containerRef, onAction, isFileOpen, isRenaming, files }) => {
   const [currentPath, setCurrentPath] = useState<string[]>([]); // Stack of folder IDs
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [activationProgress, setActivationProgress] = useState(0); // 0 to 100
@@ -34,7 +35,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
   
   const [draggedFileId, setDraggedFileId] = useState<string | null>(null);
   const [floatingFile, setFloatingFile] = useState<{id: string, x: number, y: number, scale: number} | null>(null);
-  const [actionStatus, setActionStatus] = useState<'idle' | 'ready' | 'executing'>('idle');
+  const [actionStatus, setActionStatus] = useState<'idle' | 'ready' | 'ready_rename' | 'executing'>('idle');
 
   // Logic State
   const stateRef = useRef({
@@ -45,6 +46,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     saveStartTime: 0,
     revertStartTime: 0,
     triggerStartTime: 0,
+    renameStartTime: 0,
     createFileStartTime: 0,
     lastHoverId: null as string | null,
     // Drag Hysteresis State
@@ -72,6 +74,51 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
   useEffect(() => {
     if (!landmarks || landmarks.length === 0 || !containerRef.current) return;
     const now = Date.now();
+
+    // --- RENAME MODE GESTURE HANDLING ---
+    if (isRenaming) {
+        // Thumb_Up -> Confirm rename
+        const isThumbUp = gestures.includes('Thumb_Up');
+        if (isThumbUp) {
+            if (stateRef.current.saveStartTime === 0) {
+                stateRef.current.saveStartTime = now;
+            }
+            const elapsed = now - stateRef.current.saveStartTime;
+            const progress = Math.min(100, (elapsed / 800) * 100); // 800ms hold
+            setSaveProgress(progress);
+
+            if (progress >= 100) {
+                onAction?.("CONFIRM_RENAME");
+                setSaveProgress(0);
+                stateRef.current.saveStartTime = now + 2000; // Cooldown
+            }
+        } else {
+            setSaveProgress(0);
+            stateRef.current.saveStartTime = 0;
+        }
+
+        // Closed_Fist -> Cancel rename
+        const isFist = gestures.includes('Closed_Fist');
+        if (isFist) {
+            if (stateRef.current.closeStartTime === 0) {
+                stateRef.current.closeStartTime = now;
+            }
+            const elapsed = now - stateRef.current.closeStartTime;
+            const progress = Math.min(100, (elapsed / 800) * 100); // 800ms hold
+            setCloseProgress(progress);
+
+            if (progress >= 100) {
+                onAction?.("CANCEL_RENAME");
+                setCloseProgress(0);
+                stateRef.current.closeStartTime = now + 2000; // Cooldown
+            }
+        } else {
+            setCloseProgress(0);
+            stateRef.current.closeStartTime = 0;
+        }
+
+        return; // Skip other interactions while renaming
+    }
 
     // --- 0. FILE INTERACTION LOGIC (When Open) ---
     if (isFileOpen) {
@@ -404,12 +451,14 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
 
         // TRIGGER OPEN: Secondary Hand Open Palm
         const secondaryGesture = gestures.length > 1 ? gestures[1] : 'None';
-        const isReady = landmarks.length > 1 && secondaryGesture === 'Open_Palm';
+        const isReadyOpen = landmarks.length > 1 && secondaryGesture === 'Open_Palm';
+        const isReadyRename = landmarks.length > 1 && secondaryGesture === 'Pointing_Up';
 
-        if (isReady) {
+        if (isReadyOpen) {
             if (actionStatus !== 'ready') setActionStatus('ready');
             if (stateRef.current.triggerStartTime === 0) stateRef.current.triggerStartTime = now;
-            stateRef.current.triggerDebounceTime = now; 
+            stateRef.current.triggerDebounceTime = now;
+            stateRef.current.renameStartTime = 0; // Reset rename timer
 
             const elapsed = now - stateRef.current.triggerStartTime;
             if (elapsed > 300) {
@@ -422,16 +471,35 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
                 setActionStatus('idle');
                 stateRef.current.triggerStartTime = 0;
             }
+        } else if (isReadyRename) {
+            // TRIGGER RENAME: Secondary Hand Pointing_Up
+            if (actionStatus !== 'ready_rename') setActionStatus('ready_rename');
+            if (stateRef.current.renameStartTime === 0) stateRef.current.renameStartTime = now;
+            stateRef.current.triggerDebounceTime = now;
+            stateRef.current.triggerStartTime = 0; // Reset open timer
+
+            const elapsed = now - stateRef.current.renameStartTime;
+            if (elapsed > 500) { // 500ms hold for rename
+                const file = files.find(f => f.id === floatingFile.id);
+                if (file) {
+                    onAction?.("RENAME_FILE", JSON.stringify({ id: file.id, name: file.name }));
+                }
+                setFloatingFile(null);
+                setDraggedFileId(null);
+                setActionStatus('idle');
+                stateRef.current.renameStartTime = 0;
+            }
         } else {
              const timeSinceLastDetection = now - stateRef.current.triggerDebounceTime;
              if (timeSinceLastDetection > 150) {
                  if (actionStatus !== 'idle') setActionStatus('idle');
                  stateRef.current.triggerStartTime = 0;
+                 stateRef.current.renameStartTime = 0;
              }
         }
     }
 
-  }, [landmarks, gestures, currentPath, visibleFiles, floatingFile, actionStatus, onAction, isFileOpen]);
+  }, [landmarks, gestures, currentPath, visibleFiles, floatingFile, actionStatus, onAction, isFileOpen, isRenaming]);
 
   // --- RENDERING HELPERS ---
 
@@ -521,6 +589,12 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     return Math.min(100, (elapsed / 300) * 100);
   };
 
+  const getRenameProgress = () => {
+    if (stateRef.current.renameStartTime === 0) return 0;
+    const elapsed = Date.now() - stateRef.current.renameStartTime;
+    return Math.min(100, (elapsed / 500) * 100); // 500ms for rename
+  };
+
   return (
     <div className="absolute inset-0 z-20 pointer-events-none font-sans select-none">
       
@@ -590,7 +664,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
 
       {/* Floating File */}
       {floatingFile && (
-        <div 
+        <div
           className="absolute flex flex-col items-center justify-center z-50"
           style={{
              left: floatingFile.x,
@@ -602,28 +676,44 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
         >
            <div className={`
              w-48 h-20 bg-neutral-900/90 backdrop-blur border-2 rounded-xl flex items-center gap-4 px-4 shadow-2xl overflow-hidden relative
-             ${actionStatus === 'ready' ? 'border-cyan-400 shadow-[0_0_50px_rgba(34,211,238,0.4)]' : 'border-purple-500'}
+             ${actionStatus === 'ready' ? 'border-cyan-400 shadow-[0_0_50px_rgba(34,211,238,0.4)]' :
+               actionStatus === 'ready_rename' ? 'border-amber-400 shadow-[0_0_50px_rgba(251,191,36,0.4)]' : 'border-purple-500'}
            `}>
              {actionStatus === 'ready' && (
-                <div 
+                <div
                   className="absolute left-0 top-0 bottom-0 bg-cyan-500/20 transition-all duration-75"
                   style={{ width: `${getActionProgress()}%` }}
                 />
              )}
+             {actionStatus === 'ready_rename' && (
+                <div
+                  className="absolute left-0 top-0 bottom-0 bg-amber-500/20 transition-all duration-75"
+                  style={{ width: `${getRenameProgress()}%` }}
+                />
+             )}
 
-             <FileCode size={32} className={actionStatus === 'ready' ? 'text-cyan-400' : 'text-purple-400'} />
+             <FileCode size={32} className={
+               actionStatus === 'ready' ? 'text-cyan-400' :
+               actionStatus === 'ready_rename' ? 'text-amber-400' : 'text-purple-400'
+             } />
              <div className="flex flex-col min-w-0 z-10">
                 <span className="text-xs font-bold text-white truncate max-w-[120px]">
                    {files.find(f => f.id === floatingFile.id)?.name}
                 </span>
                 <span className="text-[9px] text-neutral-400 font-mono">
-                  {actionStatus === 'ready' ? 'OPENING...' : 'DRAGGING'}
+                  {actionStatus === 'ready' ? 'OPENING...' :
+                   actionStatus === 'ready_rename' ? 'RENAMING...' : 'DRAGGING'}
                 </span>
              </div>
            </div>
            {actionStatus === 'ready' && (
              <div className="absolute -bottom-8 bg-cyan-500 text-black font-bold text-[10px] px-3 py-1 rounded-full animate-pulse whitespace-nowrap">
-               🖐️ HOLDING FOR OPEN...
+               HOLDING FOR OPEN...
+             </div>
+           )}
+           {actionStatus === 'ready_rename' && (
+             <div className="absolute -bottom-8 bg-amber-500 text-black font-bold text-[10px] px-3 py-1 rounded-full animate-pulse whitespace-nowrap flex items-center gap-1">
+               <Edit2 size={10} /> HOLDING FOR RENAME...
              </div>
            )}
         </div>
