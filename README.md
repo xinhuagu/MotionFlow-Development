@@ -4,7 +4,7 @@
 
 A spatial file system interface powered by hand gesture recognition. Navigate, browse, and edit code using natural hand movements — no mouse or keyboard required.
 
-<video src="docs/images/demo.mp4" controls autoplay loop muted width="100%"></video>
+https://github.com/user-attachments/assets/d274295e-8790-4d76-be34-11908b398470
 
 ## Features
 
