@@ -1,8 +1,15 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { NormalizedLandmark } from '@mediapipe/tasks-vision';
-import { FileCode, Folder, Server, CornerLeftUp, Hand } from 'lucide-react';
-import { FILES_DB } from '../constants';
+import { FileCode, Folder, Server, CornerLeftUp, Hand, FilePlus, Edit2, Scissors } from 'lucide-react';
+
+interface FileItem {
+  id: string;
+  name: string;
+  type: string;
+  parentId: string | null;
+  content?: string;
+}
 
 interface FileSystemInterfaceProps {
   landmarks: NormalizedLandmark[][] | null;
@@ -10,21 +17,26 @@ interface FileSystemInterfaceProps {
   containerRef: React.RefObject<HTMLDivElement>;
   onAction?: (action: string, detail?: string) => void;
   isFileOpen: boolean;
+  isRenaming: boolean;
+  files: FileItem[];
 }
 
-export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landmarks, gestures, containerRef, onAction, isFileOpen }) => {
+export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landmarks, gestures, containerRef, onAction, isFileOpen, isRenaming, files }) => {
   const [currentPath, setCurrentPath] = useState<string[]>([]); // Stack of folder IDs
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [activationProgress, setActivationProgress] = useState(0); // 0 to 100
   
   // File Action Progress States
-  const [closeProgress, setCloseProgress] = useState(0); 
+  const [closeProgress, setCloseProgress] = useState(0);
   const [saveProgress, setSaveProgress] = useState(0);
   const [revertProgress, setRevertProgress] = useState(0);
+  const [renameProgress, setRenameProgress] = useState(0);
+  const [createFileProgress, setCreateFileProgress] = useState(0);
+  const [fingerTouchPos, setFingerTouchPos] = useState<{x: number, y: number} | null>(null);
   
   const [draggedFileId, setDraggedFileId] = useState<string | null>(null);
   const [floatingFile, setFloatingFile] = useState<{id: string, x: number, y: number, scale: number} | null>(null);
-  const [actionStatus, setActionStatus] = useState<'idle' | 'ready' | 'executing'>('idle');
+  const [actionStatus, setActionStatus] = useState<'idle' | 'ready' | 'ready_rename' | 'ready_delete' | 'executing'>('idle');
 
   // Logic State
   const stateRef = useRef({
@@ -34,7 +46,12 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     closeStartTime: 0,
     saveStartTime: 0,
     revertStartTime: 0,
-    triggerStartTime: 0, 
+    triggerStartTime: 0,
+    renameStartTime: 0,
+    deleteStartTime: 0,
+    scissorsOpenDist: 0, // Track scissors finger distance
+    scissorsMode: false, // Track if we're in scissors cutting mode
+    createFileStartTime: 0,
     lastHoverId: null as string | null,
     // Drag Hysteresis State
     pinchStartX: 0,
@@ -54,13 +71,80 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
   };
 
+  // Detect horizontal pointing gesture (index finger pointing sideways)
+  const isHorizontalPointing = (hand: NormalizedLandmark[]) => {
+    const indexTip = hand[8];   // Index finger tip
+    const indexMcp = hand[5];   // Index finger base (MCP)
+    const middleTip = hand[12]; // Middle finger tip
+    const middleMcp = hand[9];  // Middle finger base
+
+    // Check index finger is extended
+    const indexExtended = Math.abs(indexTip.y - indexMcp.y) > 0.05 ||
+                          Math.abs(indexTip.x - indexMcp.x) > 0.08;
+
+    // Check middle finger is curled (tip close to MCP)
+    const middleCurled = getDistance(middleTip, middleMcp) < 0.12;
+
+    // Check pointing direction is more horizontal than vertical
+    const xDiff = Math.abs(indexTip.x - indexMcp.x);
+    const yDiff = Math.abs(indexTip.y - indexMcp.y);
+    const isHorizontal = xDiff > yDiff * 1.2; // X movement > 1.2x Y movement
+
+    return indexExtended && middleCurled && isHorizontal;
+  };
+
   // Filter files for current view
   const currentFolderId = currentPath.length > 0 ? currentPath[currentPath.length - 1] : null;
-  const visibleFiles = FILES_DB.filter(f => f.parentId === currentFolderId);
+  const visibleFiles = files.filter(f => f.parentId === currentFolderId);
 
   useEffect(() => {
     if (!landmarks || landmarks.length === 0 || !containerRef.current) return;
     const now = Date.now();
+
+    // --- RENAME MODE GESTURE HANDLING ---
+    if (isRenaming) {
+        // Thumb_Up -> Confirm rename
+        const isThumbUp = gestures.includes('Thumb_Up');
+        if (isThumbUp) {
+            if (stateRef.current.saveStartTime === 0) {
+                stateRef.current.saveStartTime = now;
+            }
+            const elapsed = now - stateRef.current.saveStartTime;
+            const progress = Math.min(100, (elapsed / 800) * 100); // 800ms hold
+            setSaveProgress(progress);
+
+            if (progress >= 100) {
+                onAction?.("CONFIRM_RENAME");
+                setSaveProgress(0);
+                stateRef.current.saveStartTime = now + 2000; // Cooldown
+            }
+        } else {
+            setSaveProgress(0);
+            stateRef.current.saveStartTime = 0;
+        }
+
+        // Closed_Fist -> Cancel rename
+        const isFist = gestures.includes('Closed_Fist');
+        if (isFist) {
+            if (stateRef.current.closeStartTime === 0) {
+                stateRef.current.closeStartTime = now;
+            }
+            const elapsed = now - stateRef.current.closeStartTime;
+            const progress = Math.min(100, (elapsed / 800) * 100); // 800ms hold
+            setCloseProgress(progress);
+
+            if (progress >= 100) {
+                onAction?.("CANCEL_RENAME");
+                setCloseProgress(0);
+                stateRef.current.closeStartTime = now + 2000; // Cooldown
+            }
+        } else {
+            setCloseProgress(0);
+            stateRef.current.closeStartTime = 0;
+        }
+
+        return; // Skip other interactions while renaming
+    }
 
     // --- 0. FILE INTERACTION LOGIC (When Open) ---
     if (isFileOpen) {
@@ -125,7 +209,27 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
             stateRef.current.revertStartTime = 0;
         }
 
-        // 4. ZOOM LOGIC
+        // 4. RENAME ACTION (Horizontal Pointing) - Rename current open file
+        const isHorizontalPoint = landmarks.length > 0 && isHorizontalPointing(landmarks[0]);
+        if (isHorizontalPoint) {
+            if (stateRef.current.renameStartTime === 0) {
+                stateRef.current.renameStartTime = now;
+            }
+            const elapsed = now - stateRef.current.renameStartTime;
+            const progress = Math.min(100, (elapsed / 800) * 100); // 800ms hold
+            setRenameProgress(progress);
+
+            if (progress >= 100) {
+                onAction?.("RENAME_OPEN_FILE");
+                setRenameProgress(0);
+                stateRef.current.renameStartTime = now + 2000; // Cooldown
+            }
+        } else {
+            setRenameProgress(0);
+            stateRef.current.renameStartTime = 0;
+        }
+
+        // 5. ZOOM LOGIC
         // If we are locked, skip all zoom calculations
         if (stateRef.current.isZoomLocked) {
              return; 
@@ -225,6 +329,45 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
 
     const cursorX = stateRef.current.cursorX;
     const cursorY = stateRef.current.cursorY;
+
+    // --- 1.5 TWO-FINGER TOUCH DETECTION (Create New File) ---
+    if (landmarks.length >= 2 && !floatingFile) {
+      const hand1IndexTip = landmarks[0][8];
+      const hand2IndexTip = landmarks[1][8];
+      const fingerDistance = getDistance(hand1IndexTip, hand2IndexTip);
+      const TOUCH_THRESHOLD = 0.05;
+
+      if (fingerDistance < TOUCH_THRESHOLD) {
+        // Calculate touch position (midpoint between two fingers)
+        const touchX = ((1 - hand1IndexTip.x) + (1 - hand2IndexTip.x)) / 2 * rect.width;
+        const touchY = (hand1IndexTip.y + hand2IndexTip.y) / 2 * rect.height;
+        setFingerTouchPos({ x: touchX, y: touchY });
+
+        if (stateRef.current.createFileStartTime === 0) {
+          stateRef.current.createFileStartTime = now;
+        }
+
+        const elapsed = now - stateRef.current.createFileStartTime;
+        const progress = Math.min(100, (elapsed / 1000) * 100); // 1s hold
+        setCreateFileProgress(progress);
+
+        if (progress >= 100) {
+          // Trigger create file action with current folder ID
+          onAction?.("CREATE_FILE", currentFolderId || 'root');
+          setCreateFileProgress(0);
+          setFingerTouchPos(null);
+          stateRef.current.createFileStartTime = now + 2000; // Cooldown
+        }
+      } else {
+        setCreateFileProgress(0);
+        setFingerTouchPos(null);
+        stateRef.current.createFileStartTime = 0;
+      }
+    } else {
+      setCreateFileProgress(0);
+      setFingerTouchPos(null);
+      stateRef.current.createFileStartTime = 0;
+    }
 
     // --- 2. HIT TEST ---
     let hitId: string | null = null;
@@ -347,23 +490,29 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
         setDraggedFileId(null);
         setActionStatus('idle');
         stateRef.current.triggerStartTime = 0;
+        stateRef.current.scissorsMode = false;
+        stateRef.current.scissorsOpenDist = 0;
     }
 
     if (floatingFile && isPrimaryPinching) {
         setFloatingFile(prev => prev ? ({...prev, x: cursorX, y: cursorY}) : null);
 
-        // TRIGGER OPEN: Secondary Hand Open Palm
+        // TRIGGER ACTIONS: Secondary Hand Gestures
         const secondaryGesture = gestures.length > 1 ? gestures[1] : 'None';
-        const isReady = landmarks.length > 1 && secondaryGesture === 'Open_Palm';
+        const isReadyOpen = landmarks.length > 1 && secondaryGesture === 'Open_Palm';
+        const isReadyRename = landmarks.length > 1 && isHorizontalPointing(landmarks[1]);
+        const isReadyDelete = landmarks.length > 1 && secondaryGesture === 'Victory';
 
-        if (isReady) {
+        if (isReadyOpen) {
             if (actionStatus !== 'ready') setActionStatus('ready');
             if (stateRef.current.triggerStartTime === 0) stateRef.current.triggerStartTime = now;
-            stateRef.current.triggerDebounceTime = now; 
+            stateRef.current.triggerDebounceTime = now;
+            stateRef.current.renameStartTime = 0; // Reset rename timer
+            stateRef.current.deleteStartTime = 0; // Reset delete timer
 
             const elapsed = now - stateRef.current.triggerStartTime;
             if (elapsed > 300) {
-                const file = FILES_DB.find(f => f.id === floatingFile.id);
+                const file = files.find(f => f.id === floatingFile.id);
                 if (file) {
                     onAction?.("OPEN_FILE", JSON.stringify({ id: file.id, name: file.name, content: file.content }));
                 }
@@ -372,16 +521,78 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
                 setActionStatus('idle');
                 stateRef.current.triggerStartTime = 0;
             }
+        } else if (isReadyRename) {
+            // TRIGGER RENAME: Secondary Hand Horizontal Pointing
+            if (actionStatus !== 'ready_rename') setActionStatus('ready_rename');
+            if (stateRef.current.renameStartTime === 0) stateRef.current.renameStartTime = now;
+            stateRef.current.triggerDebounceTime = now;
+            stateRef.current.triggerStartTime = 0; // Reset open timer
+            stateRef.current.deleteStartTime = 0; // Reset delete timer
+
+            const elapsed = now - stateRef.current.renameStartTime;
+            if (elapsed > 500) { // 500ms hold for rename
+                const file = files.find(f => f.id === floatingFile.id);
+                if (file) {
+                    onAction?.("RENAME_FILE", JSON.stringify({ id: file.id, name: file.name }));
+                }
+                setFloatingFile(null);
+                setDraggedFileId(null);
+                setActionStatus('idle');
+                stateRef.current.renameStartTime = 0;
+            }
+        } else if (isReadyDelete || stateRef.current.scissorsMode) {
+            // TRIGGER DELETE: Secondary Hand Victory (Scissors) + Cutting Motion
+            // Track finger distance for cutting motion
+            const secHand = landmarks[1];
+            const indexTip = secHand[8];  // Index finger tip
+            const middleTip = secHand[12]; // Middle finger tip
+            const fingerDist = getDistance(indexTip, middleTip);
+
+            const SCISSORS_OPEN_THRESHOLD = 0.05;  // Fingers spread apart
+            const SCISSORS_CLOSE_THRESHOLD = 0.025; // Fingers closed together
+
+            // Enter scissors mode when Victory detected with fingers spread
+            if (isReadyDelete && fingerDist > SCISSORS_OPEN_THRESHOLD) {
+                if (!stateRef.current.scissorsMode) {
+                    stateRef.current.scissorsMode = true;
+                    stateRef.current.scissorsOpenDist = fingerDist;
+                }
+            }
+
+            if (stateRef.current.scissorsMode) {
+                if (actionStatus !== 'ready_delete') setActionStatus('ready_delete');
+                stateRef.current.triggerDebounceTime = now;
+                stateRef.current.triggerStartTime = 0;
+                stateRef.current.renameStartTime = 0;
+
+                // Check if fingers closed (cut motion)
+                if (fingerDist < SCISSORS_CLOSE_THRESHOLD) {
+                    // Scissors cut motion detected!
+                    const file = files.find(f => f.id === floatingFile.id);
+                    if (file) {
+                        onAction?.("DELETE_FILE", JSON.stringify({ id: file.id, name: file.name }));
+                    }
+                    setFloatingFile(null);
+                    setDraggedFileId(null);
+                    setActionStatus('idle');
+                    stateRef.current.scissorsMode = false;
+                    stateRef.current.scissorsOpenDist = 0;
+                }
+            }
         } else {
              const timeSinceLastDetection = now - stateRef.current.triggerDebounceTime;
              if (timeSinceLastDetection > 150) {
                  if (actionStatus !== 'idle') setActionStatus('idle');
                  stateRef.current.triggerStartTime = 0;
+                 stateRef.current.renameStartTime = 0;
+                 stateRef.current.deleteStartTime = 0;
+                 stateRef.current.scissorsOpenDist = 0;
+                 stateRef.current.scissorsMode = false;
              }
         }
     }
 
-  }, [landmarks, gestures, currentPath, visibleFiles, floatingFile, actionStatus, onAction, isFileOpen]);
+  }, [landmarks, gestures, currentPath, visibleFiles, floatingFile, actionStatus, onAction, isFileOpen, isRenaming]);
 
   // --- RENDERING HELPERS ---
 
@@ -406,10 +617,13 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
             ringColor = '#ef4444'; // Red for Close
         } else if (saveProgress > 0) {
             progress = saveProgress;
-            ringColor = '#22d3ee'; // Cyan (Greenish) for Save
+            ringColor = '#22d3ee'; // Cyan for Save
         } else if (revertProgress > 0) {
             progress = revertProgress;
             ringColor = '#f59e0b'; // Amber for Revert
+        } else if (renameProgress > 0) {
+            progress = renameProgress;
+            ringColor = '#a855f7'; // Purple for Rename
         }
     } else {
         progress = activationProgress;
@@ -469,6 +683,18 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     if (stateRef.current.triggerStartTime === 0) return 0;
     const elapsed = Date.now() - stateRef.current.triggerStartTime;
     return Math.min(100, (elapsed / 300) * 100);
+  };
+
+  const getRenameProgress = () => {
+    if (stateRef.current.renameStartTime === 0) return 0;
+    const elapsed = Date.now() - stateRef.current.renameStartTime;
+    return Math.min(100, (elapsed / 500) * 100); // 500ms for rename
+  };
+
+  const getDeleteProgress = () => {
+    if (stateRef.current.deleteStartTime === 0) return 0;
+    const elapsed = Date.now() - stateRef.current.deleteStartTime;
+    return Math.min(100, (elapsed / 800) * 100); // 800ms for delete
   };
 
   return (
@@ -540,7 +766,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
 
       {/* Floating File */}
       {floatingFile && (
-        <div 
+        <div
           className="absolute flex flex-col items-center justify-center z-50"
           style={{
              left: floatingFile.x,
@@ -552,30 +778,96 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
         >
            <div className={`
              w-48 h-20 bg-neutral-900/90 backdrop-blur border-2 rounded-xl flex items-center gap-4 px-4 shadow-2xl overflow-hidden relative
-             ${actionStatus === 'ready' ? 'border-cyan-400 shadow-[0_0_50px_rgba(34,211,238,0.4)]' : 'border-purple-500'}
+             ${actionStatus === 'ready' ? 'border-cyan-400 shadow-[0_0_50px_rgba(34,211,238,0.4)]' :
+               actionStatus === 'ready_rename' ? 'border-amber-400 shadow-[0_0_50px_rgba(251,191,36,0.4)]' :
+               actionStatus === 'ready_delete' ? 'border-red-500 shadow-[0_0_50px_rgba(239,68,68,0.4)]' : 'border-purple-500'}
            `}>
              {actionStatus === 'ready' && (
-                <div 
+                <div
                   className="absolute left-0 top-0 bottom-0 bg-cyan-500/20 transition-all duration-75"
                   style={{ width: `${getActionProgress()}%` }}
                 />
              )}
+             {actionStatus === 'ready_rename' && (
+                <div
+                  className="absolute left-0 top-0 bottom-0 bg-amber-500/20 transition-all duration-75"
+                  style={{ width: `${getRenameProgress()}%` }}
+                />
+             )}
+             {actionStatus === 'ready_delete' && (
+                <div className="absolute inset-0 bg-red-500/10 animate-pulse" />
+             )}
 
-             <FileCode size={32} className={actionStatus === 'ready' ? 'text-cyan-400' : 'text-purple-400'} />
+             <FileCode size={32} className={
+               actionStatus === 'ready' ? 'text-cyan-400' :
+               actionStatus === 'ready_rename' ? 'text-amber-400' :
+               actionStatus === 'ready_delete' ? 'text-red-500' : 'text-purple-400'
+             } />
              <div className="flex flex-col min-w-0 z-10">
                 <span className="text-xs font-bold text-white truncate max-w-[120px]">
-                   {FILES_DB.find(f => f.id === floatingFile.id)?.name}
+                   {files.find(f => f.id === floatingFile.id)?.name}
                 </span>
                 <span className="text-[9px] text-neutral-400 font-mono">
-                  {actionStatus === 'ready' ? 'OPENING...' : 'DRAGGING'}
+                  {actionStatus === 'ready' ? 'OPENING...' :
+                   actionStatus === 'ready_rename' ? 'RENAMING...' :
+                   actionStatus === 'ready_delete' ? 'SCISSORS READY' : 'DRAGGING'}
                 </span>
              </div>
            </div>
            {actionStatus === 'ready' && (
              <div className="absolute -bottom-8 bg-cyan-500 text-black font-bold text-[10px] px-3 py-1 rounded-full animate-pulse whitespace-nowrap">
-               🖐️ HOLDING FOR OPEN...
+               HOLDING FOR OPEN...
              </div>
            )}
+           {actionStatus === 'ready_rename' && (
+             <div className="absolute -bottom-8 bg-amber-500 text-black font-bold text-[10px] px-3 py-1 rounded-full animate-pulse whitespace-nowrap flex items-center gap-1">
+               <Edit2 size={10} /> HOLDING FOR RENAME...
+             </div>
+           )}
+           {actionStatus === 'ready_delete' && (
+             <div className="absolute -bottom-8 bg-red-500 text-white font-bold text-[10px] px-3 py-1 rounded-full animate-pulse whitespace-nowrap flex items-center gap-1">
+               <Scissors size={10} /> CUT TO DELETE
+             </div>
+           )}
+        </div>
+      )}
+
+      {/* Create File Touch Indicator */}
+      {fingerTouchPos && createFileProgress > 0 && (
+        <div
+          className="absolute z-50 flex flex-col items-center justify-center pointer-events-none"
+          style={{
+            left: fingerTouchPos.x,
+            top: fingerTouchPos.y,
+            transform: 'translate(-50%, -50%)'
+          }}
+        >
+          <div className="relative w-20 h-20 flex items-center justify-center">
+            {/* Progress Ring */}
+            <svg className="absolute w-full h-full -rotate-90">
+              <circle
+                cx="40" cy="40" r="36"
+                fill="none"
+                stroke="rgba(34, 211, 238, 0.2)"
+                strokeWidth="4"
+              />
+              <circle
+                cx="40" cy="40" r="36"
+                fill="none"
+                stroke="#22d3ee"
+                strokeWidth="4"
+                strokeDasharray={2 * Math.PI * 36}
+                strokeDashoffset={2 * Math.PI * 36 * (1 - createFileProgress / 100)}
+                strokeLinecap="round"
+                className="transition-all duration-75"
+              />
+            </svg>
+            {/* Icon */}
+            <FilePlus size={28} className="text-cyan-400 animate-pulse" />
+          </div>
+          <div className="mt-2 bg-cyan-500 text-black font-bold text-[10px] px-3 py-1 rounded-full whitespace-nowrap">
+            CREATING NEW FILE...
+          </div>
         </div>
       )}
 

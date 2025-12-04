@@ -2,7 +2,7 @@
 
 **Reshaping the Future of Software Development**
 
-A spatial file system interface powered by hand gesture recognition. Navigate, browse, and edit code using natural hand movements — no mouse or keyboard required.
+A spatial file system interface powered by hand gesture recognition. Navigate, browse, and edit code using natural hand movements.
 
 > Built with AI-assisted development using Claude Code & Google Gemini
 
@@ -11,15 +11,16 @@ A spatial file system interface powered by hand gesture recognition. Navigate, b
 ## Highlights
 
 - **100% Local** — Runs entirely in your browser, no cloud API required
-- **AI-Assisted Development** — Built with Claude Code & Google Gemini
-- **Zero Configuration** — Just `npm install` and start
+- **Gesture Conducting** — Orchestrate your workflow with natural hand movements
+- **Zero Configuration** — Just `npm install` and start conducting
 
 ## Features
 
-- **Gesture-Based Navigation** — Point and pinch to browse folders
-- **Dual-Hand Interaction** — Drag files with one hand, trigger actions with the other
-- **Code Viewer** — Open, edit, and save files using intuitive gestures
-- **Real-Time Hand Tracking** — Powered by MediaPipe with dual-hand support
+- **Spatial Navigation** — Point and pinch to conduct folder traversal
+- **Dual-Hand Orchestration** — Coordinate both hands like a conductor: one hand positions, the other signals actions
+- **Code Performance** — Open, edit, and save files with gesture commands
+- **File Choreography** — Create, rename, and delete files through expressive motions
+- **Real-Time Tracking** — MediaPipe captures every nuance of your conducting
 
 ## Quick Start
 
@@ -35,7 +36,10 @@ Open `http://localhost:3000` and allow camera access.
 | Gesture | Action |
 |---------|--------|
 | Point + Pinch Hold | Navigate into folder |
+| Two Index Fingers Touch | Create new file |
 | Drag + Open Palm | Open file viewer |
+| Drag + Horizontal Point | Rename file |
+| Drag + Scissors Cut | Delete file |
 | Thumb Up (hold) | Save file |
 | Thumb Down (hold) | Revert changes |
 | Closed Fist (hold) | Close file |
@@ -129,7 +133,10 @@ MediaPipe runs entirely in the browser using WebAssembly. It detects up to 2 han
 
 Gestures used in this application:
 - `Pinch & Hold` — Drag file
+- `Two Fingers Touch` — Create new file (both index fingers touching)
 - `Open_Palm` — Open file (with second hand while dragging)
+- `Horizontal Point` — Rename file (index finger pointing sideways)
+- `Victory + Cut` — Delete file (scissors gesture then close fingers)
 - `Closed_Fist` — Close file
 - `Thumb_Up` — Save file
 - `Thumb_Down` — Revert changes
