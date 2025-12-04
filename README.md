@@ -4,7 +4,7 @@
 
 A spatial file system interface powered by hand gesture recognition. Navigate, browse, and edit code using natural hand movements — no mouse or keyboard required.
 
-> Built with AI-assisted development using Claude Code
+> Built with AI-assisted development using Claude Code & Google Gemini
 
 <video src="https://github.com/user-attachments/assets/d274295e-8790-4d76-be34-11908b398470" autoplay loop muted playsinline width="100%"></video>
 
@@ -12,7 +12,7 @@ A spatial file system interface powered by hand gesture recognition. Navigate, b
 
 - **100% Local** — Runs entirely in your browser, no cloud API required
 - **No GPU Required** — Works on any modern device with a webcam
-- **AI-Assisted Development** — Codebase created with Claude Code assistance
+- **AI-Assisted Development** — Built with Claude Code & Google Gemini
 - **Zero Configuration** — Just `npm install` and start
 
 ## Features
@@ -179,4 +179,4 @@ MIT
 
 ---
 
-*This project was built with AI-assisted development using [Claude Code](https://claude.ai/code)*
+*Built with AI-assisted development using [Claude Code](https://claude.ai/code) & [Google Gemini](https://gemini.google.com)*
