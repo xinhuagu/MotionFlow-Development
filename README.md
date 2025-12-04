@@ -19,6 +19,7 @@ A spatial file system interface powered by hand gesture recognition. Navigate, b
 - **Gesture-Based Navigation** — Point and pinch to browse folders
 - **Dual-Hand Interaction** — Drag files with one hand, trigger actions with the other
 - **Code Viewer** — Open, edit, and save files using intuitive gestures
+- **File Management** — Create, rename, and delete files with gesture controls
 - **Real-Time Hand Tracking** — Powered by MediaPipe with dual-hand support
 
 ## Quick Start
@@ -35,7 +36,10 @@ Open `http://localhost:3000` and allow camera access.
 | Gesture | Action |
 |---------|--------|
 | Point + Pinch Hold | Navigate into folder |
+| Two Index Fingers Touch | Create new file |
 | Drag + Open Palm | Open file viewer |
+| Drag + Pointing Up | Rename file |
+| Drag + Scissors Cut | Delete file |
 | Thumb Up (hold) | Save file |
 | Thumb Down (hold) | Revert changes |
 | Closed Fist (hold) | Close file |
@@ -129,7 +133,10 @@ MediaPipe runs entirely in the browser using WebAssembly. It detects up to 2 han
 
 Gestures used in this application:
 - `Pinch & Hold` — Drag file
+- `Two Fingers Touch` — Create new file (both index fingers touching)
 - `Open_Palm` — Open file (with second hand while dragging)
+- `Pointing_Up` — Rename file (with second hand while dragging)
+- `Victory + Cut` — Delete file (scissors gesture then close fingers)
 - `Closed_Fist` — Close file
 - `Thumb_Up` — Save file
 - `Thumb_Down` — Revert changes

@@ -140,6 +140,23 @@ export default function App() {
         setRenamingFile(null);
         setNewFileName('');
         handleLog('Rename cancelled', 'warning');
+    } else if (action === 'DELETE_FILE' && detail) {
+        try {
+            const fileData = JSON.parse(detail);
+            setFiles(prev => prev.filter(f => f.id !== fileData.id));
+            handleLog(`Deleted ${fileData.name}`, 'warning');
+            // Close file if it was open
+            if (activeFile?.id === fileData.id) {
+                setActiveFile(null);
+            }
+            // Close rename modal if it was for this file
+            if (renamingFile?.id === fileData.id) {
+                setRenamingFile(null);
+                setNewFileName('');
+            }
+        } catch (e) {
+            handleLog(`Error deleting file: ${e}`, 'error');
+        }
     } else {
        handleLog(`${action}: ${detail}`, 'cmd');
     }

@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { NormalizedLandmark } from '@mediapipe/tasks-vision';
-import { FileCode, Folder, Server, CornerLeftUp, Hand, FilePlus, Edit2 } from 'lucide-react';
+import { FileCode, Folder, Server, CornerLeftUp, Hand, FilePlus, Edit2, Scissors } from 'lucide-react';
 
 interface FileItem {
   id: string;
@@ -35,7 +35,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
   
   const [draggedFileId, setDraggedFileId] = useState<string | null>(null);
   const [floatingFile, setFloatingFile] = useState<{id: string, x: number, y: number, scale: number} | null>(null);
-  const [actionStatus, setActionStatus] = useState<'idle' | 'ready' | 'ready_rename' | 'executing'>('idle');
+  const [actionStatus, setActionStatus] = useState<'idle' | 'ready' | 'ready_rename' | 'ready_delete' | 'executing'>('idle');
 
   // Logic State
   const stateRef = useRef({
@@ -47,6 +47,9 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     revertStartTime: 0,
     triggerStartTime: 0,
     renameStartTime: 0,
+    deleteStartTime: 0,
+    scissorsOpenDist: 0, // Track scissors finger distance
+    scissorsMode: false, // Track if we're in scissors cutting mode
     createFileStartTime: 0,
     lastHoverId: null as string | null,
     // Drag Hysteresis State
@@ -444,21 +447,25 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
         setDraggedFileId(null);
         setActionStatus('idle');
         stateRef.current.triggerStartTime = 0;
+        stateRef.current.scissorsMode = false;
+        stateRef.current.scissorsOpenDist = 0;
     }
 
     if (floatingFile && isPrimaryPinching) {
         setFloatingFile(prev => prev ? ({...prev, x: cursorX, y: cursorY}) : null);
 
-        // TRIGGER OPEN: Secondary Hand Open Palm
+        // TRIGGER ACTIONS: Secondary Hand Gestures
         const secondaryGesture = gestures.length > 1 ? gestures[1] : 'None';
         const isReadyOpen = landmarks.length > 1 && secondaryGesture === 'Open_Palm';
         const isReadyRename = landmarks.length > 1 && secondaryGesture === 'Pointing_Up';
+        const isReadyDelete = landmarks.length > 1 && secondaryGesture === 'Victory';
 
         if (isReadyOpen) {
             if (actionStatus !== 'ready') setActionStatus('ready');
             if (stateRef.current.triggerStartTime === 0) stateRef.current.triggerStartTime = now;
             stateRef.current.triggerDebounceTime = now;
             stateRef.current.renameStartTime = 0; // Reset rename timer
+            stateRef.current.deleteStartTime = 0; // Reset delete timer
 
             const elapsed = now - stateRef.current.triggerStartTime;
             if (elapsed > 300) {
@@ -477,6 +484,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
             if (stateRef.current.renameStartTime === 0) stateRef.current.renameStartTime = now;
             stateRef.current.triggerDebounceTime = now;
             stateRef.current.triggerStartTime = 0; // Reset open timer
+            stateRef.current.deleteStartTime = 0; // Reset delete timer
 
             const elapsed = now - stateRef.current.renameStartTime;
             if (elapsed > 500) { // 500ms hold for rename
@@ -489,12 +497,54 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
                 setActionStatus('idle');
                 stateRef.current.renameStartTime = 0;
             }
+        } else if (isReadyDelete || stateRef.current.scissorsMode) {
+            // TRIGGER DELETE: Secondary Hand Victory (Scissors) + Cutting Motion
+            // Track finger distance for cutting motion
+            const secHand = landmarks[1];
+            const indexTip = secHand[8];  // Index finger tip
+            const middleTip = secHand[12]; // Middle finger tip
+            const fingerDist = getDistance(indexTip, middleTip);
+
+            const SCISSORS_OPEN_THRESHOLD = 0.05;  // Fingers spread apart
+            const SCISSORS_CLOSE_THRESHOLD = 0.025; // Fingers closed together
+
+            // Enter scissors mode when Victory detected with fingers spread
+            if (isReadyDelete && fingerDist > SCISSORS_OPEN_THRESHOLD) {
+                if (!stateRef.current.scissorsMode) {
+                    stateRef.current.scissorsMode = true;
+                    stateRef.current.scissorsOpenDist = fingerDist;
+                }
+            }
+
+            if (stateRef.current.scissorsMode) {
+                if (actionStatus !== 'ready_delete') setActionStatus('ready_delete');
+                stateRef.current.triggerDebounceTime = now;
+                stateRef.current.triggerStartTime = 0;
+                stateRef.current.renameStartTime = 0;
+
+                // Check if fingers closed (cut motion)
+                if (fingerDist < SCISSORS_CLOSE_THRESHOLD) {
+                    // Scissors cut motion detected!
+                    const file = files.find(f => f.id === floatingFile.id);
+                    if (file) {
+                        onAction?.("DELETE_FILE", JSON.stringify({ id: file.id, name: file.name }));
+                    }
+                    setFloatingFile(null);
+                    setDraggedFileId(null);
+                    setActionStatus('idle');
+                    stateRef.current.scissorsMode = false;
+                    stateRef.current.scissorsOpenDist = 0;
+                }
+            }
         } else {
              const timeSinceLastDetection = now - stateRef.current.triggerDebounceTime;
              if (timeSinceLastDetection > 150) {
                  if (actionStatus !== 'idle') setActionStatus('idle');
                  stateRef.current.triggerStartTime = 0;
                  stateRef.current.renameStartTime = 0;
+                 stateRef.current.deleteStartTime = 0;
+                 stateRef.current.scissorsOpenDist = 0;
+                 stateRef.current.scissorsMode = false;
              }
         }
     }
@@ -595,6 +645,12 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     return Math.min(100, (elapsed / 500) * 100); // 500ms for rename
   };
 
+  const getDeleteProgress = () => {
+    if (stateRef.current.deleteStartTime === 0) return 0;
+    const elapsed = Date.now() - stateRef.current.deleteStartTime;
+    return Math.min(100, (elapsed / 800) * 100); // 800ms for delete
+  };
+
   return (
     <div className="absolute inset-0 z-20 pointer-events-none font-sans select-none">
       
@@ -677,7 +733,8 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
            <div className={`
              w-48 h-20 bg-neutral-900/90 backdrop-blur border-2 rounded-xl flex items-center gap-4 px-4 shadow-2xl overflow-hidden relative
              ${actionStatus === 'ready' ? 'border-cyan-400 shadow-[0_0_50px_rgba(34,211,238,0.4)]' :
-               actionStatus === 'ready_rename' ? 'border-amber-400 shadow-[0_0_50px_rgba(251,191,36,0.4)]' : 'border-purple-500'}
+               actionStatus === 'ready_rename' ? 'border-amber-400 shadow-[0_0_50px_rgba(251,191,36,0.4)]' :
+               actionStatus === 'ready_delete' ? 'border-red-500 shadow-[0_0_50px_rgba(239,68,68,0.4)]' : 'border-purple-500'}
            `}>
              {actionStatus === 'ready' && (
                 <div
@@ -691,10 +748,14 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
                   style={{ width: `${getRenameProgress()}%` }}
                 />
              )}
+             {actionStatus === 'ready_delete' && (
+                <div className="absolute inset-0 bg-red-500/10 animate-pulse" />
+             )}
 
              <FileCode size={32} className={
                actionStatus === 'ready' ? 'text-cyan-400' :
-               actionStatus === 'ready_rename' ? 'text-amber-400' : 'text-purple-400'
+               actionStatus === 'ready_rename' ? 'text-amber-400' :
+               actionStatus === 'ready_delete' ? 'text-red-500' : 'text-purple-400'
              } />
              <div className="flex flex-col min-w-0 z-10">
                 <span className="text-xs font-bold text-white truncate max-w-[120px]">
@@ -702,7 +763,8 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
                 </span>
                 <span className="text-[9px] text-neutral-400 font-mono">
                   {actionStatus === 'ready' ? 'OPENING...' :
-                   actionStatus === 'ready_rename' ? 'RENAMING...' : 'DRAGGING'}
+                   actionStatus === 'ready_rename' ? 'RENAMING...' :
+                   actionStatus === 'ready_delete' ? 'SCISSORS READY' : 'DRAGGING'}
                 </span>
              </div>
            </div>
@@ -714,6 +776,11 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
            {actionStatus === 'ready_rename' && (
              <div className="absolute -bottom-8 bg-amber-500 text-black font-bold text-[10px] px-3 py-1 rounded-full animate-pulse whitespace-nowrap flex items-center gap-1">
                <Edit2 size={10} /> HOLDING FOR RENAME...
+             </div>
+           )}
+           {actionStatus === 'ready_delete' && (
+             <div className="absolute -bottom-8 bg-red-500 text-white font-bold text-[10px] px-3 py-1 rounded-full animate-pulse whitespace-nowrap flex items-center gap-1">
+               <Scissors size={10} /> CUT TO DELETE
              </div>
            )}
         </div>
