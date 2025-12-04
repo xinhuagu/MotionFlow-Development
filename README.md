@@ -1,10 +1,19 @@
-# MotionFlow-Development  ( v0.0.1)
+# MotionFlow-Development (v0.0.1)
 
 **Reshaping the Future of Software Development**
 
 A spatial file system interface powered by hand gesture recognition. Navigate, browse, and edit code using natural hand movements — no mouse or keyboard required.
 
+> Built with AI-assisted development using Claude Code
+
 <video src="https://github.com/user-attachments/assets/d274295e-8790-4d76-be34-11908b398470" autoplay loop muted playsinline width="100%"></video>
+
+## Highlights
+
+- **100% Local** — Runs entirely in your browser, no cloud API required
+- **No GPU Required** — Works on any modern device with a webcam
+- **AI-Assisted Development** — Codebase created with Claude Code assistance
+- **Zero Configuration** — Just `npm install` and start
 
 ## Features
 
@@ -36,54 +45,138 @@ Open `http://localhost:3000` and allow camera access.
 
 ```mermaid
 flowchart TB
-    subgraph Frontend["Frontend"]
-        A[React 19 + TypeScript + Vite + Tailwind CSS]
+    subgraph Frontend["Frontend Layer"]
+        A1[React 19]
+        A2[TypeScript]
+        A3[Vite]
+        A4[Tailwind CSS]
     end
 
-    subgraph Vision["Vision Processing"]
-        B[MediaPipe GestureRecognizer]
-        B1[Dual-hand tracking]
-        B2[Real-time gesture classification]
-        B3[GPU-accelerated WASM]
+    subgraph Vision["Vision Processing Layer"]
+        B[MediaPipe Tasks Vision]
+        B1["GestureRecognizer (WASM)"]
+        B2[Dual-hand tracking]
+        B3[7 gesture types supported]
     end
 
-    subgraph Spatial["Spatial UI Layer"]
-        C1[Landmark to Cursor mapping]
-        C2[Gesture to Action translation]
-        C3[Progress-based activation]
+    subgraph Spatial["Spatial Interaction Layer"]
+        C1[Hand landmark extraction]
+        C2[Cursor position mapping]
+        C3[Gesture-to-action binding]
+        C4[Progress-based activation]
     end
 
-    Frontend --> Vision --> Spatial
+    subgraph App["Application Layer"]
+        D1[Virtual File System]
+        D2[Code Editor]
+        D3[Action Logger]
+    end
+
+    Frontend --> Vision
+    Vision --> Spatial
+    Spatial --> App
 ```
 
 ## Architecture
 
 ```mermaid
-graph LR
-    subgraph Hooks
-        H1[useLiveSession.ts]
+graph TB
+    subgraph Browser["Browser Runtime"]
+        CAM[Webcam Stream]
+        MP[MediaPipe WASM]
     end
 
-    subgraph Components
+    subgraph Hooks["React Hooks"]
+        H1[useLiveSession]
+    end
+
+    subgraph State["State Management"]
+        S1[landmarks]
+        S2[gestures]
+        S3[files]
+        S4[activeFile]
+    end
+
+    subgraph UI["UI Components"]
         C1[FileSystemInterface]
         C2[VideoHUD]
         C3[Terminal]
         C4[StatusPanel]
     end
 
-    subgraph Core
-        K1[constants.ts]
-        K2[App.tsx]
-    end
-
-    H1 -->|landmarks, gestures| K2
-    K2 --> C1
-    K2 --> C2
-    K2 --> C3
-    K2 --> C4
-    K1 -->|FILES_DB| C1
+    CAM --> MP
+    MP --> H1
+    H1 --> S1
+    H1 --> S2
+    S1 --> C1
+    S2 --> C1
+    S3 --> C1
+    S4 --> C1
+    S1 --> C2
+    S2 --> C2
 ```
+
+## How It Works
+
+### 1. Hand Tracking Pipeline
+
+```
+Webcam → MediaPipe WASM → 21 landmarks per hand → Normalized coordinates
+```
+
+MediaPipe runs entirely in the browser using WebAssembly. It detects up to 2 hands and outputs 21 landmark points per hand in real-time.
+
+### 2. Gesture Recognition
+
+MediaPipe classifies hand poses into 7 gesture types:
+- `Open_Palm` — Trigger file open
+- `Closed_Fist` — Close file
+- `Thumb_Up` — Save file
+- `Thumb_Down` — Revert changes
+- `Pointing_Up` — Navigation
+- `Victory` / `ILoveYou` — Reserved
+
+### 3. Spatial Mapping
+
+Hand landmarks are mapped to screen coordinates:
+```
+screenX = (1 - landmark.x) * containerWidth   // Mirrored
+screenY = landmark.y * containerHeight
+```
+
+### 4. Interaction Model
+
+Actions use a **progress-based activation** system:
+- Single-hand pinch + hold (1 second) → Navigate
+- Dual-hand pinch → Instant click
+- Gesture hold (1 second) → File operations
+
+This prevents accidental triggers and provides visual feedback via progress rings.
+
+## Project Structure
+
+```
+├── App.tsx                 # Main app, state management
+├── constants.ts            # Mock file system data
+├── hooks/
+│   └── useLiveSession.ts   # MediaPipe integration
+└── components/
+    ├── FileSystemInterface # Gesture-to-action logic
+    ├── VideoHUD            # Camera feed overlay
+    ├── Terminal            # Action logger
+    └── StatusPanel         # System metrics
+```
+
+## Requirements
+
+- Modern browser (Chrome, Edge, Firefox)
+- Webcam
+- Node.js 18+
 
 ## License
 
 MIT
+
+---
+
+*This project was built with AI-assisted development using [Claude Code](https://claude.ai/code)*
