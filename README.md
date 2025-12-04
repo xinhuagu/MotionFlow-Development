@@ -11,7 +11,6 @@ A spatial file system interface powered by hand gesture recognition. Navigate, b
 ## Highlights
 
 - **100% Local** — Runs entirely in your browser, no cloud API required
-- **No GPU Required** — Works on any modern device with a webcam
 - **AI-Assisted Development** — Built with Claude Code & Google Gemini
 - **Zero Configuration** — Just `npm install` and start
 
