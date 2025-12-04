@@ -2,7 +2,7 @@
 
 **Reshaping the Future of Software Development**
 
-A spatial file system interface powered by hand gesture recognition. Navigate, browse, and edit code using natural hand movements — no mouse or keyboard required.
+A spatial file system interface powered by hand gesture recognition. Navigate, browse, and edit code using natural hand movements.
 
 > Built with AI-assisted development using Claude Code & Google Gemini
 
