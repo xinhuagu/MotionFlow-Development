@@ -1,8 +1,8 @@
 # MotionFlow-Development (v0.0.1)
 
-**Reshaping the Future of Software Development**
+**Conduct Your Code with Natural Gestures**
 
-A spatial file system interface powered by hand gesture recognition. Navigate, browse, and edit code using natural hand movements — no mouse or keyboard required.
+A spatial orchestrator that transforms your hands into a conductor's baton. Direct file operations, navigate codebases, and edit files through intuitive gestures — your workspace responds to your every movement.
 
 > Built with AI-assisted development using Claude Code & Google Gemini
 
@@ -11,16 +11,16 @@ A spatial file system interface powered by hand gesture recognition. Navigate, b
 ## Highlights
 
 - **100% Local** — Runs entirely in your browser, no cloud API required
-- **AI-Assisted Development** — Built with Claude Code & Google Gemini
-- **Zero Configuration** — Just `npm install` and start
+- **Gesture Conducting** — Orchestrate your workflow with natural hand movements
+- **Zero Configuration** — Just `npm install` and start conducting
 
 ## Features
 
-- **Gesture-Based Navigation** — Point and pinch to browse folders
-- **Dual-Hand Interaction** — Drag files with one hand, trigger actions with the other
-- **Code Viewer** — Open, edit, and save files using intuitive gestures
-- **File Management** — Create, rename, and delete files with gesture controls
-- **Real-Time Hand Tracking** — Powered by MediaPipe with dual-hand support
+- **Spatial Navigation** — Point and pinch to conduct folder traversal
+- **Dual-Hand Orchestration** — Coordinate both hands like a conductor: one hand positions, the other signals actions
+- **Code Performance** — Open, edit, and save files with gesture commands
+- **File Choreography** — Create, rename, and delete files through expressive motions
+- **Real-Time Tracking** — MediaPipe captures every nuance of your conducting
 
 ## Quick Start
 
