@@ -127,11 +127,22 @@ export default function App() {
         } catch (e) {
             handleLog(`Error opening rename dialog: ${e}`, 'error');
         }
+    } else if (action === 'RENAME_OPEN_FILE') {
+        // Rename the currently open file
+        if (activeFile) {
+            setRenamingFile({ id: activeFile.id, name: activeFile.name });
+            setNewFileName(activeFile.name);
+            handleLog(`Renaming ${activeFile.name}...`, 'info');
+        }
     } else if (action === 'CONFIRM_RENAME') {
         if (renamingFile && newFileName.trim()) {
             setFiles(prev => prev.map(f =>
                 f.id === renamingFile.id ? { ...f, name: newFileName.trim() } : f
             ));
+            // Also update activeFile name if it's the one being renamed
+            if (activeFile && activeFile.id === renamingFile.id) {
+                setActiveFile({ ...activeFile, name: newFileName.trim() });
+            }
             handleLog(`Renamed to ${newFileName.trim()}`, 'success');
         }
         setRenamingFile(null);
@@ -293,6 +304,10 @@ export default function App() {
                          </div>
 
                          <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-1 text-purple-400">
+                                <Edit2 size={10} />
+                                <span>POINT UP RENAME</span>
+                            </div>
                             <div className="flex items-center gap-1 text-amber-500">
                                 <ThumbsDown size={10} />
                                 <span>THUMB DOWN REVERT</span>

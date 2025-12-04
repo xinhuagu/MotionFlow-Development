@@ -30,6 +30,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
   const [closeProgress, setCloseProgress] = useState(0);
   const [saveProgress, setSaveProgress] = useState(0);
   const [revertProgress, setRevertProgress] = useState(0);
+  const [renameProgress, setRenameProgress] = useState(0);
   const [createFileProgress, setCreateFileProgress] = useState(0);
   const [fingerTouchPos, setFingerTouchPos] = useState<{x: number, y: number} | null>(null);
   
@@ -68,6 +69,28 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
 
   const getDistance = (p1: NormalizedLandmark, p2: NormalizedLandmark) => {
     return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+  };
+
+  // Detect horizontal pointing gesture (index finger pointing sideways)
+  const isHorizontalPointing = (hand: NormalizedLandmark[]) => {
+    const indexTip = hand[8];   // Index finger tip
+    const indexMcp = hand[5];   // Index finger base (MCP)
+    const middleTip = hand[12]; // Middle finger tip
+    const middleMcp = hand[9];  // Middle finger base
+
+    // Check index finger is extended
+    const indexExtended = Math.abs(indexTip.y - indexMcp.y) > 0.05 ||
+                          Math.abs(indexTip.x - indexMcp.x) > 0.08;
+
+    // Check middle finger is curled (tip close to MCP)
+    const middleCurled = getDistance(middleTip, middleMcp) < 0.12;
+
+    // Check pointing direction is more horizontal than vertical
+    const xDiff = Math.abs(indexTip.x - indexMcp.x);
+    const yDiff = Math.abs(indexTip.y - indexMcp.y);
+    const isHorizontal = xDiff > yDiff * 1.2; // X movement > 1.2x Y movement
+
+    return indexExtended && middleCurled && isHorizontal;
   };
 
   // Filter files for current view
@@ -186,7 +209,27 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
             stateRef.current.revertStartTime = 0;
         }
 
-        // 4. ZOOM LOGIC
+        // 4. RENAME ACTION (Horizontal Pointing) - Rename current open file
+        const isHorizontalPoint = landmarks.length > 0 && isHorizontalPointing(landmarks[0]);
+        if (isHorizontalPoint) {
+            if (stateRef.current.renameStartTime === 0) {
+                stateRef.current.renameStartTime = now;
+            }
+            const elapsed = now - stateRef.current.renameStartTime;
+            const progress = Math.min(100, (elapsed / 800) * 100); // 800ms hold
+            setRenameProgress(progress);
+
+            if (progress >= 100) {
+                onAction?.("RENAME_OPEN_FILE");
+                setRenameProgress(0);
+                stateRef.current.renameStartTime = now + 2000; // Cooldown
+            }
+        } else {
+            setRenameProgress(0);
+            stateRef.current.renameStartTime = 0;
+        }
+
+        // 5. ZOOM LOGIC
         // If we are locked, skip all zoom calculations
         if (stateRef.current.isZoomLocked) {
              return; 
@@ -457,7 +500,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
         // TRIGGER ACTIONS: Secondary Hand Gestures
         const secondaryGesture = gestures.length > 1 ? gestures[1] : 'None';
         const isReadyOpen = landmarks.length > 1 && secondaryGesture === 'Open_Palm';
-        const isReadyRename = landmarks.length > 1 && secondaryGesture === 'Pointing_Up';
+        const isReadyRename = landmarks.length > 1 && isHorizontalPointing(landmarks[1]);
         const isReadyDelete = landmarks.length > 1 && secondaryGesture === 'Victory';
 
         if (isReadyOpen) {
@@ -479,7 +522,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
                 stateRef.current.triggerStartTime = 0;
             }
         } else if (isReadyRename) {
-            // TRIGGER RENAME: Secondary Hand Pointing_Up
+            // TRIGGER RENAME: Secondary Hand Horizontal Pointing
             if (actionStatus !== 'ready_rename') setActionStatus('ready_rename');
             if (stateRef.current.renameStartTime === 0) stateRef.current.renameStartTime = now;
             stateRef.current.triggerDebounceTime = now;
@@ -574,10 +617,13 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
             ringColor = '#ef4444'; // Red for Close
         } else if (saveProgress > 0) {
             progress = saveProgress;
-            ringColor = '#22d3ee'; // Cyan (Greenish) for Save
+            ringColor = '#22d3ee'; // Cyan for Save
         } else if (revertProgress > 0) {
             progress = revertProgress;
             ringColor = '#f59e0b'; // Amber for Revert
+        } else if (renameProgress > 0) {
+            progress = renameProgress;
+            ringColor = '#a855f7'; // Purple for Rename
         }
     } else {
         progress = activationProgress;

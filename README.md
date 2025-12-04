@@ -38,7 +38,7 @@ Open `http://localhost:3000` and allow camera access.
 | Point + Pinch Hold | Navigate into folder |
 | Two Index Fingers Touch | Create new file |
 | Drag + Open Palm | Open file viewer |
-| Drag + Pointing Up | Rename file |
+| Drag + Horizontal Point | Rename file |
 | Drag + Scissors Cut | Delete file |
 | Thumb Up (hold) | Save file |
 | Thumb Down (hold) | Revert changes |
@@ -135,7 +135,7 @@ Gestures used in this application:
 - `Pinch & Hold` — Drag file
 - `Two Fingers Touch` — Create new file (both index fingers touching)
 - `Open_Palm` — Open file (with second hand while dragging)
-- `Pointing_Up` — Rename file (with second hand while dragging)
+- `Horizontal Point` — Rename file (index finger pointing sideways)
 - `Victory + Cut` — Delete file (scissors gesture then close fingers)
 - `Closed_Fist` — Close file
 - `Thumb_Up` — Save file
