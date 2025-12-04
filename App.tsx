@@ -188,12 +188,13 @@ export default function App() {
              
              {/* Spatial File System Overlay */}
              {isConnected && (
-               <FileSystemInterface 
-                 landmarks={landmarks} 
+               <FileSystemInterface
+                 landmarks={landmarks}
                  gestures={gestures}
-                 containerRef={hudContainerRef} 
+                 containerRef={hudContainerRef}
                  onAction={handleFileSystemAction}
                  isFileOpen={!!activeFile}
+                 files={files}
                />
              )}
 

@@ -2,7 +2,14 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { NormalizedLandmark } from '@mediapipe/tasks-vision';
 import { FileCode, Folder, Server, CornerLeftUp, Hand, FilePlus } from 'lucide-react';
-import { FILES_DB } from '../constants';
+
+interface FileItem {
+  id: string;
+  name: string;
+  type: string;
+  parentId: string | null;
+  content?: string;
+}
 
 interface FileSystemInterfaceProps {
   landmarks: NormalizedLandmark[][] | null;
@@ -10,9 +17,10 @@ interface FileSystemInterfaceProps {
   containerRef: React.RefObject<HTMLDivElement>;
   onAction?: (action: string, detail?: string) => void;
   isFileOpen: boolean;
+  files: FileItem[];
 }
 
-export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landmarks, gestures, containerRef, onAction, isFileOpen }) => {
+export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landmarks, gestures, containerRef, onAction, isFileOpen, files }) => {
   const [currentPath, setCurrentPath] = useState<string[]>([]); // Stack of folder IDs
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [activationProgress, setActivationProgress] = useState(0); // 0 to 100
@@ -59,7 +67,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
 
   // Filter files for current view
   const currentFolderId = currentPath.length > 0 ? currentPath[currentPath.length - 1] : null;
-  const visibleFiles = FILES_DB.filter(f => f.parentId === currentFolderId);
+  const visibleFiles = files.filter(f => f.parentId === currentFolderId);
 
   useEffect(() => {
     if (!landmarks || landmarks.length === 0 || !containerRef.current) return;
@@ -405,7 +413,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
 
             const elapsed = now - stateRef.current.triggerStartTime;
             if (elapsed > 300) {
-                const file = FILES_DB.find(f => f.id === floatingFile.id);
+                const file = files.find(f => f.id === floatingFile.id);
                 if (file) {
                     onAction?.("OPEN_FILE", JSON.stringify({ id: file.id, name: file.name, content: file.content }));
                 }
@@ -606,7 +614,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
              <FileCode size={32} className={actionStatus === 'ready' ? 'text-cyan-400' : 'text-purple-400'} />
              <div className="flex flex-col min-w-0 z-10">
                 <span className="text-xs font-bold text-white truncate max-w-[120px]">
-                   {FILES_DB.find(f => f.id === floatingFile.id)?.name}
+                   {files.find(f => f.id === floatingFile.id)?.name}
                 </span>
                 <span className="text-[9px] text-neutral-400 font-mono">
                   {actionStatus === 'ready' ? 'OPENING...' : 'DRAGGING'}
