@@ -1,0 +1,8 @@
+{
+  "name": "Accenture Software - AI Command Center",
+  "description": "Next-gen DevOps interface powered by Accenture AI. Control infrastructure with hand gestures and voice commands.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

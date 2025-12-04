@@ -1,0 +1,50 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Build and Run Commands
+
+```bash
+npm install    # Install dependencies
+npm run dev    # Start development server (port 3000)
+npm run build  # Production build to dist/
+npm run preview # Preview production build
+```
+
+## Architecture Overview
+
+This is a **spatial file system interface** using hand gesture recognition. Users interact with a virtual file browser through webcam-tracked hand gestures.
+
+### Core Data Flow
+
+```
+Webcam → MediaPipe (hand tracking) → useLiveSession hook → gesture/landmark state
+                                                              ↓
+App.tsx ← FileSystemInterface ← gesture-based navigation/actions
+```
+
+### Key Components
+
+- **`hooks/useLiveSession.ts`**: Core hook managing MediaPipe gesture recognition and webcam stream. Exposes `landmarks` (hand positions) and `gestures` (recognized gestures like "Closed_Fist", "Open_Palm").
+
+- **`components/FileSystemInterface.tsx`**: Spatial UI layer. Translates hand landmarks to cursor positions and implements gesture-based interactions:
+  - Pinch + hold = navigate folders
+  - Drag file + open palm (second hand) = open file viewer
+  - Thumb up/down = save/revert file
+  - Closed fist = close file
+
+- **`constants.ts`**: Contains `FILES_DB` - the mock file system data structure with folders and file contents.
+
+### Gesture Recognition
+
+Uses MediaPipe's `GestureRecognizer` with dual-hand tracking. Gestures are mapped from `@mediapipe/tasks-vision` and include: `Closed_Fist`, `Open_Palm`, `Pointing_Up`, `Thumb_Up`, `Thumb_Down`, `Victory`, `ILoveYou`.
+
+### State Management
+
+All state is local React state in `App.tsx`. File edits modify local `files` state (cloned from `FILES_DB`). The `activeFile` state controls the code viewer modal.
+
+## Code Style Notes
+
+- Do not use Chinese in code or comments
+- Tailwind CSS for styling (loaded via CDN in index.html)
+- TypeScript with strict mode
