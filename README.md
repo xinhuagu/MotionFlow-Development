@@ -128,13 +128,12 @@ MediaPipe runs entirely in the browser using WebAssembly. It detects up to 2 han
 
 ### 2. Gesture Recognition
 
-MediaPipe classifies hand poses into 7 gesture types:
-- `Open_Palm` — Trigger file open
+Gestures used in this application:
+- `Pinch & Hold` — Drag file
+- `Open_Palm` — Open file (with second hand while dragging)
 - `Closed_Fist` — Close file
 - `Thumb_Up` — Save file
 - `Thumb_Down` — Revert changes
-- `Pointing_Up` — Navigation
-- `Victory` / `ILoveYou` — Reserved
 
 ### 3. Spatial Mapping
 
