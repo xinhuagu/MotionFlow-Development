@@ -6,7 +6,7 @@ A spatial file system interface powered by hand gesture recognition. Navigate, b
 
 > Built with AI-assisted development using Claude Code & Google Gemini
 
-<video src="https://github.com/user-attachments/assets/d274295e-8790-4d76-be34-11908b398470" autoplay loop muted playsinline width="100%"></video>
+<video src="https://github.com/user-attachments/assets/f5adbafd-c2c2-4000-aea3-a4fcc3380bac" autoplay loop muted playsinline width="100%"></video>
 
 ## Highlights
 
