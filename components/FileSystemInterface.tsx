@@ -500,7 +500,29 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
         const secondaryGesture = gestures.length > 1 ? gestures[1] : 'None';
         const isReadyOpen = landmarks.length > 1 && secondaryGesture === 'Open_Palm';
         const isReadyRename = landmarks.length > 1 && isHorizontalPointing(landmarks[1]);
-        const isReadyDelete = landmarks.length > 1 && secondaryGesture === 'Victory';
+        // Detect horizontal scissors gesture (index and middle fingers extended horizontally)
+        const isHorizontalScissors = (hand: NormalizedLandmark[]) => {
+            const indexTip = hand[8];
+            const indexMcp = hand[5];
+            const middleTip = hand[12];
+            const middleMcp = hand[9];
+            const ringTip = hand[16];
+            const ringMcp = hand[13];
+
+            // Check index and middle fingers are extended
+            const indexExtended = getDistance(indexTip, indexMcp) > 0.1;
+            const middleExtended = getDistance(middleTip, middleMcp) > 0.1;
+
+            // Check ring finger is curled
+            const ringCurled = getDistance(ringTip, ringMcp) < 0.08;
+
+            // Check fingers are more horizontal than vertical
+            const indexHorizontal = Math.abs(indexTip.x - indexMcp.x) > Math.abs(indexTip.y - indexMcp.y);
+            const middleHorizontal = Math.abs(middleTip.x - middleMcp.x) > Math.abs(middleTip.y - middleMcp.y);
+
+            return indexExtended && middleExtended && ringCurled && (indexHorizontal || middleHorizontal);
+        };
+        const isReadyDelete = landmarks.length > 1 && (secondaryGesture === 'Victory' || isHorizontalScissors(landmarks[1]));
 
         if (isReadyOpen) {
             if (actionStatus !== 'ready') setActionStatus('ready');
