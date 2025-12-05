@@ -6,7 +6,7 @@ import { Terminal } from './components/Terminal';
 import { StatusPanel } from './components/StatusPanel';
 import { FileSystemInterface } from './components/FileSystemInterface';
 import { LogEntry } from './types';
-import { Power, ChevronRight, Hand, MousePointer2, X, FileText, Save, ZoomIn, Lock, MoveHorizontal, RotateCcw, ThumbsDown, ThumbsUp, Edit2, FolderOpen } from 'lucide-react';
+import { Power, ChevronRight, Hand, MousePointer2, X, FileText, Save, ZoomIn, Lock, MoveHorizontal, RotateCcw, ThumbsDown, ThumbsUp, Edit2, FolderOpen, Video, VideoOff } from 'lucide-react';
 import { FILES_DB } from './constants';
 
 export default function App() {
@@ -26,6 +26,9 @@ export default function App() {
   // Rename File State
   const [renamingFile, setRenamingFile] = useState<{id: string, name: string} | null>(null);
   const [newFileName, setNewFileName] = useState('');
+
+  // Video Display Mode: true = show video, false = show only hand tracking points
+  const [showVideo, setShowVideo] = useState(true);
 
   const handleLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
     setLogs(prev => [...prev, {
@@ -258,11 +261,12 @@ export default function App() {
           {/* Main HUD Container - Holds Video + Spatial UI */}
           <div ref={hudContainerRef} className="relative w-full flex-1 min-h-0 bg-black rounded-xl overflow-hidden border border-purple-900/50">
              <div className="absolute inset-0">
-                <VideoHUD 
-                videoRef={videoRef} 
-                canvasRef={canvasRef} 
-                isConnected={isConnected} 
+                <VideoHUD
+                videoRef={videoRef}
+                canvasRef={canvasRef}
+                isConnected={isConnected}
                 gestureName={gestures.join(' + ')}
+                showVideo={showVideo}
                 />
              </div>
              
@@ -277,6 +281,25 @@ export default function App() {
                  isRenaming={!!renamingFile}
                  files={files}
                />
+             )}
+
+             {/* Video Toggle Button - Positioned above overlays */}
+             {isConnected && (
+               <button
+                 onClick={() => setShowVideo(prev => !prev)}
+                 className={`
+                   absolute bottom-4 right-4 z-[80] flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-300
+                   ${showVideo
+                     ? 'bg-purple-500/30 border border-purple-500/50 text-purple-300 hover:bg-purple-500/40'
+                     : 'bg-cyan-500/30 border border-cyan-500/50 text-cyan-300 hover:bg-cyan-500/40'}
+                 `}
+                 title={showVideo ? 'Hide camera video' : 'Show camera video'}
+               >
+                 {showVideo ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
+                 <span className="text-xs font-mono tracking-wider">
+                   {showVideo ? 'HIDE FACE' : 'SHOW FACE'}
+                 </span>
+               </button>
              )}
 
              {/* CODE VIEWER MODAL */}

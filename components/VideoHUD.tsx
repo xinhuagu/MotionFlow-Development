@@ -6,20 +6,21 @@ interface VideoHUDProps {
   canvasRef: React.RefObject<HTMLCanvasElement>;
   isConnected: boolean;
   gestureName?: string;
+  showVideo?: boolean;
 }
 
-export const VideoHUD: React.FC<VideoHUDProps> = ({ videoRef, canvasRef, isConnected, gestureName }) => {
+export const VideoHUD: React.FC<VideoHUDProps> = ({ videoRef, canvasRef, isConnected, gestureName, showVideo = true }) => {
   return (
     <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border-2 border-purple-900/50 shadow-[0_0_30px_rgba(168,85,247,0.15)] group">
-      {/* Video Element - Mirrored */}
+      {/* Video Element - Mirrored (hidden when showVideo is false) */}
       <video
         ref={videoRef}
-        className="absolute inset-0 w-full h-full object-cover opacity-80 scale-x-[-1]"
+        className={`absolute inset-0 w-full h-full object-cover scale-x-[-1] transition-opacity duration-300 ${showVideo ? 'opacity-80' : 'opacity-0'}`}
         autoPlay
         playsInline
         muted
       />
-      
+
       {/* MediaPipe Canvas Overlay - Mirrored */}
       <canvas
         ref={canvasRef}
@@ -46,7 +47,7 @@ export const VideoHUD: React.FC<VideoHUDProps> = ({ videoRef, canvasRef, isConne
             <span>RECOGNITION: {isConnected ? 'ACTIVE' : 'STANDBY'}</span>
          </div>
       </div>
-      
+
       {/* Detected Gesture Alert */}
       {gestureName && isConnected && (
         <div className="absolute top-6 right-8 pointer-events-none animate-in fade-in slide-in-from-top-4 duration-300">

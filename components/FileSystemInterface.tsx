@@ -557,8 +557,11 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
             const middleTip = secHand[12]; // Middle finger tip
             const fingerDist = getDistance(indexTip, middleTip);
 
-            const SCISSORS_OPEN_THRESHOLD = 0.05;  // Fingers spread apart
-            const SCISSORS_CLOSE_THRESHOLD = 0.025; // Fingers closed together
+            const SCISSORS_OPEN_THRESHOLD = 0.04;  // Fingers spread apart
+            const SCISSORS_CLOSE_THRESHOLD = 0.02; // Fingers closed together
+
+            // Debug
+            console.log('SCISSORS:', { isReadyDelete, fingerDist, scissorsMode: stateRef.current.scissorsMode, gesture: gestures[1] });
 
             // Enter scissors mode when Victory detected with fingers spread
             if (isReadyDelete && fingerDist > SCISSORS_OPEN_THRESHOLD) {
