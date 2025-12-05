@@ -54,6 +54,28 @@ Open `http://localhost:3000` and allow camera access.
 | Horizontal Point | Rename file | Point index finger sideways and hold (800ms) |
 | Two-Hand Spread | Zoom text | Use both hands, spread/pinch to adjust font size |
 
+### Number Recognition Mode
+
+A special mode for recognizing number gestures (1-5). Supports both German and American counting styles.
+
+| Gesture | Action | How To |
+|---------|--------|--------|
+| Fist + Shake | Toggle number mode | Make a fist and shake 3-4 times (works with palm or back facing camera) |
+
+**German Style** (thumb extended):
+- 1 = Thumb only
+- 2 = Thumb + Index
+- 3 = Thumb + Index + Middle
+- 4 = Thumb + Index + Middle + Ring
+- 5 = All fingers
+
+**American Style** (thumb tucked):
+- 1 = Index finger only (pointing up)
+- 2 = Index + Middle (V sign)
+- 3 = Index + Middle + Ring
+- 4 = Index + Middle + Ring + Pinky
+- 5 = All fingers
+
 ## Tech Stack
 
 ```mermaid
@@ -150,6 +172,8 @@ Gestures used in this application:
 - `Closed_Fist` — Close file
 - `Thumb_Up` — Save file
 - `Thumb_Down` — Revert changes
+- `Fist + Shake` — Toggle number recognition mode
+- `Number Gestures (1-5)` — German style (thumb-first) or American style (index-first)
 
 ### 3. Spatial Mapping
 
