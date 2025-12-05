@@ -69,8 +69,9 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     dropCooldownUntil: 0,
     // Shake Detection State (for number mode toggle)
     lastWristX: 0,
+    lastWristY: 0,
     shakeDirectionChanges: 0,
-    lastShakeDirection: 0, // -1 = left, 1 = right
+    lastShakeDirection: 0, // -1 = negative, 1 = positive
     shakeStartTime: 0,
     lastShakeToggleTime: 0,
     // Number detection stability
@@ -178,18 +179,46 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     const primaryGesture = gestures[0] || 'None';
 
     // --- SHAKE DETECTION (for number mode toggle) ---
+    // Works with both palm-facing and back-facing fist by detecting movement in any direction
     const SHAKE_COOLDOWN = 1500; // 1.5s cooldown between toggles
     const SHAKE_WINDOW = 1000; // 1 second window for shake detection
-    const SHAKE_THRESHOLD = 0.03; // Minimum X movement to count as direction change
+    const SHAKE_THRESHOLD = 0.025; // Minimum movement to count as direction change
     const SHAKE_COUNT_NEEDED = 3; // Need 3-4 direction changes
 
-    if (primaryGesture === 'Closed_Fist' && now - stateRef.current.lastShakeToggleTime > SHAKE_COOLDOWN) {
+    // Custom fist detection: all fingers curled (tips close to palm/MCP)
+    // This works regardless of hand orientation (palm or back facing camera)
+    const detectClosedFist = (hand: NormalizedLandmark[]): boolean => {
+      const wrist = hand[0];
+      const indexTip = hand[8], indexMcp = hand[5];
+      const middleTip = hand[12], middleMcp = hand[9];
+      const ringTip = hand[16], ringMcp = hand[13];
+      const pinkyTip = hand[20], pinkyMcp = hand[17];
+      const thumbTip = hand[4], thumbIp = hand[3];
+
+      // Check all fingers are curled: tip is close to MCP or wrist
+      const CURL_THRESHOLD = 0.08;
+      const indexCurled = getDistance(indexTip, indexMcp) < CURL_THRESHOLD || getDistance(indexTip, wrist) < 0.15;
+      const middleCurled = getDistance(middleTip, middleMcp) < CURL_THRESHOLD || getDistance(middleTip, wrist) < 0.15;
+      const ringCurled = getDistance(ringTip, ringMcp) < CURL_THRESHOLD || getDistance(ringTip, wrist) < 0.15;
+      const pinkyCurled = getDistance(pinkyTip, pinkyMcp) < CURL_THRESHOLD || getDistance(pinkyTip, wrist) < 0.15;
+      const thumbCurled = getDistance(thumbTip, thumbIp) < 0.05 || getDistance(thumbTip, indexMcp) < 0.1;
+
+      // At least 4 fingers must be curled for a fist
+      const curledCount = [indexCurled, middleCurled, ringCurled, pinkyCurled].filter(Boolean).length;
+      return curledCount >= 3; // Allow some tolerance
+    };
+
+    const isFist = primaryGesture === 'Closed_Fist' || detectClosedFist(primaryHand);
+
+    if (isFist && now - stateRef.current.lastShakeToggleTime > SHAKE_COOLDOWN) {
       const wristX = primaryHand[0].x;
+      const wristY = primaryHand[0].y;
 
       // Initialize on first fist detection
       if (stateRef.current.shakeStartTime === 0) {
         stateRef.current.shakeStartTime = now;
         stateRef.current.lastWristX = wristX;
+        stateRef.current.lastWristY = wristY;
         stateRef.current.shakeDirectionChanges = 0;
         stateRef.current.lastShakeDirection = 0;
       }
@@ -197,9 +226,14 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
       // Check if still within shake window
       if (now - stateRef.current.shakeStartTime < SHAKE_WINDOW) {
         const deltaX = wristX - stateRef.current.lastWristX;
+        const deltaY = wristY - stateRef.current.lastWristY;
 
-        if (Math.abs(deltaX) > SHAKE_THRESHOLD) {
-          const newDirection = deltaX > 0 ? 1 : -1;
+        // Use whichever axis has more movement (supports horizontal or vertical shake)
+        const useXAxis = Math.abs(deltaX) > Math.abs(deltaY);
+        const delta = useXAxis ? deltaX : deltaY;
+
+        if (Math.abs(delta) > SHAKE_THRESHOLD) {
+          const newDirection = delta > 0 ? 1 : -1;
 
           // Count direction change
           if (stateRef.current.lastShakeDirection !== 0 && newDirection !== stateRef.current.lastShakeDirection) {
@@ -208,6 +242,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
 
           stateRef.current.lastShakeDirection = newDirection;
           stateRef.current.lastWristX = wristX;
+          stateRef.current.lastWristY = wristY;
 
           // Check if shake detected
           if (stateRef.current.shakeDirectionChanges >= SHAKE_COUNT_NEEDED) {
@@ -227,8 +262,9 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
         stateRef.current.shakeDirectionChanges = 0;
         stateRef.current.lastShakeDirection = 0;
         stateRef.current.lastWristX = wristX;
+        stateRef.current.lastWristY = wristY;
       }
-    } else if (primaryGesture !== 'Closed_Fist') {
+    } else if (!isFist) {
       // Reset when not fist
       stateRef.current.shakeStartTime = 0;
       stateRef.current.shakeDirectionChanges = 0;
