@@ -113,10 +113,9 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
   // American: 1=index, 2=index+middle (V), 3=index+middle+ring, 4=index+middle+ring+pinky, 5=all
   const detectNumberGesture = (hand: NormalizedLandmark[]): number | null => {
     const thumbTip = hand[4];
-    const thumbIp = hand[3];   // Thumb IP joint
     const thumbMcp = hand[2];
     const indexTip = hand[8];
-    const indexPip = hand[6];  // Index PIP joint
+    const indexPip = hand[6];
     const indexMcp = hand[5];
     const middleTip = hand[12];
     const middlePip = hand[10];
@@ -129,40 +128,55 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     const pinkyMcp = hand[17];
     const wrist = hand[0];
 
-    // For thumb: check if it's extended outward (away from palm)
-    // Thumb is extended if tip is far from index MCP (spread out)
-    const thumbToIndexMcp = getDistance(thumbTip, indexMcp);
-    const thumbExtended = thumbToIndexMcp > 0.1;
+    // Calculate hand span (distance from thumb tip to pinky tip)
+    // Open palm has large span, closed hand has small span
+    const handSpan = getDistance(thumbTip, pinkyTip);
+    const isOpenPalm = handSpan > 0.2; // Lower threshold for open palm detection
 
-    // For other fingers: check if tip is higher (lower Y) than PIP joint
-    // This is more reliable than distance-based detection
-    const indexExtended = indexTip.y < indexPip.y - 0.02;
-    const middleExtended = middleTip.y < middlePip.y - 0.02;
-    const ringExtended = ringTip.y < ringPip.y - 0.02;
-    const pinkyExtended = pinkyTip.y < pinkyPip.y - 0.02;
+    // For thumb: check if it's extended outward (away from palm)
+    // Use lower threshold - thumb just needs to be slightly open
+    const thumbToIndexMcp = getDistance(thumbTip, indexMcp);
+    const thumbExtended = thumbToIndexMcp > 0.06; // Lowered from 0.1 to 0.06
+
+    // Check if each finger is curled (tip close to MCP = curled)
+    const CURL_THRESHOLD = 0.07;
+    const indexCurled = getDistance(indexTip, indexMcp) < CURL_THRESHOLD;
+    const middleCurled = getDistance(middleTip, middleMcp) < CURL_THRESHOLD;
+    const ringCurled = getDistance(ringTip, ringMcp) < CURL_THRESHOLD;
+    const pinkyCurled = getDistance(pinkyTip, pinkyMcp) < 0.06; // Pinky is shorter
+
+    // Finger is extended if NOT curled
+    const indexExtended = !indexCurled;
+    const middleExtended = !middleCurled;
+    const ringExtended = !ringCurled;
+    const pinkyExtended = !pinkyCurled;
 
     // Count extended fingers (excluding thumb)
     const extendedFingers = [indexExtended, middleExtended, ringExtended, pinkyExtended].filter(Boolean).length;
 
-    // Determine which style based on thumb position
+    // PRIORITY 1: Open palm detection (hand span method)
+    // If hand span is large, it's definitely 5
+    if (isOpenPalm && thumbExtended) {
+      return 5;
+    }
+
+    // PRIORITY 2: Check specific patterns
     if (thumbExtended) {
       // German style: thumb participates in counting
-      // Count = thumb + other extended fingers
-      const totalFingers = 1 + extendedFingers; // thumb counts as 1
-
-      // Validate German patterns
       if (extendedFingers === 0) return 1; // Only thumb
-      if (indexExtended && !middleExtended && !ringExtended && !pinkyExtended) return 2; // thumb + index
-      if (indexExtended && middleExtended && !ringExtended && !pinkyExtended) return 3; // thumb + index + middle
-      if (indexExtended && middleExtended && ringExtended && !pinkyExtended) return 4; // thumb + index + middle + ring
-      if (indexExtended && middleExtended && ringExtended && pinkyExtended) return 5; // all fingers
+      if (extendedFingers === 1 && indexExtended) return 2; // thumb + index
+      if (extendedFingers === 2 && indexExtended && middleExtended) return 3; // thumb + index + middle
+      // For 4: need exactly index+middle+ring extended, pinky curled
+      if (indexExtended && middleExtended && ringExtended && pinkyCurled) return 4;
+      // Otherwise if 3+ fingers, assume 5
+      if (extendedFingers >= 3) return 5;
     } else {
       // American style: thumb is tucked, only count other fingers
-      if (extendedFingers === 0) return null; // No fingers = no number
-      if (indexExtended && !middleExtended && !ringExtended && !pinkyExtended) return 1; // index only
-      if (indexExtended && middleExtended && !ringExtended && !pinkyExtended) return 2; // V sign
-      if (indexExtended && middleExtended && ringExtended && !pinkyExtended) return 3; // three fingers
-      if (indexExtended && middleExtended && ringExtended && pinkyExtended) return 4; // four fingers (no thumb)
+      if (extendedFingers === 0) return null;
+      if (extendedFingers === 1 && indexExtended) return 1; // index only
+      if (extendedFingers === 2 && indexExtended && middleExtended) return 2; // V sign
+      if (extendedFingers === 3 && indexExtended && middleExtended && ringExtended) return 3;
+      if (extendedFingers >= 4) return 4; // four fingers (no thumb)
     }
 
     return null;
@@ -273,27 +287,29 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
 
     // --- NUMBER MODE ---
     if (isNumberMode) {
-      // Detect and report number (shake detection above handles exit)
-      const number = detectNumberGesture(primaryHand) ?? 0;
+      // Detect numbers from both hands and sum them (allows 0-10)
+      const leftHandNumber = detectNumberGesture(primaryHand) ?? 0;
+      const rightHandNumber = landmarks.length > 1 ? (detectNumberGesture(landmarks[1]) ?? 0) : 0;
+      const totalNumber = leftHandNumber + rightHandNumber;
 
       // Number stability detection - only report when stable for 300ms
       const NUMBER_STABLE_TIME = 300; // ms to hold before confirming
 
-      if (number === stateRef.current.lastDetectedNumber) {
+      if (totalNumber === stateRef.current.lastDetectedNumber) {
         // Same number detected, check if stable long enough
         if (stateRef.current.numberStableStartTime === 0) {
           stateRef.current.numberStableStartTime = now;
         }
 
         const stableDuration = now - stateRef.current.numberStableStartTime;
-        if (stableDuration >= NUMBER_STABLE_TIME && number !== stateRef.current.confirmedNumber) {
+        if (stableDuration >= NUMBER_STABLE_TIME && totalNumber !== stateRef.current.confirmedNumber) {
           // Number has been stable long enough, confirm it
-          stateRef.current.confirmedNumber = number;
-          onAction?.("NUMBER_DETECTED", number.toString());
+          stateRef.current.confirmedNumber = totalNumber;
+          onAction?.("NUMBER_DETECTED", totalNumber.toString());
         }
       } else {
         // Different number detected, reset stability timer
-        stateRef.current.lastDetectedNumber = number;
+        stateRef.current.lastDetectedNumber = totalNumber;
         stateRef.current.numberStableStartTime = now;
       }
 

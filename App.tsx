@@ -328,7 +328,7 @@ export default function App() {
                  <div className="absolute left-8 top-1/2 -translate-y-1/2 flex flex-col items-center">
                    {/* Mode Indicator */}
                    <div className="bg-amber-500/90 text-black px-4 py-1.5 rounded-full font-bold text-xs tracking-wider animate-pulse mb-4">
-                     NUMBER MODE
+                     NUMBER MODE (0-10)
                    </div>
 
                    {/* Number Display */}
@@ -341,7 +341,7 @@ export default function App() {
 
                    {/* Status Text */}
                    <div className="text-neutral-400 text-sm mt-2 font-mono">
-                     {recognizedNumber !== null && recognizedNumber > 0 ? `Detected` : 'Show gesture'}
+                     {recognizedNumber !== null && recognizedNumber > 0 ? `Both hands sum` : 'Show gesture(s)'}
                    </div>
 
                    {/* Exit Instructions */}
