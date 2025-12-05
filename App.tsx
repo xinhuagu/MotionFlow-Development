@@ -6,7 +6,7 @@ import { Terminal } from './components/Terminal';
 import { StatusPanel } from './components/StatusPanel';
 import { FileSystemInterface } from './components/FileSystemInterface';
 import { LogEntry } from './types';
-import { Power, ChevronRight, Hand, MousePointer2, X, FileText, Save, ZoomIn, Lock, MoveHorizontal, RotateCcw, ThumbsDown, ThumbsUp, Edit2 } from 'lucide-react';
+import { Power, ChevronRight, Hand, MousePointer2, X, FileText, Save, ZoomIn, Lock, MoveHorizontal, RotateCcw, ThumbsDown, ThumbsUp, Edit2, FolderOpen } from 'lucide-react';
 import { FILES_DB } from './constants';
 
 export default function App() {
@@ -154,13 +154,39 @@ export default function App() {
     } else if (action === 'DELETE_FILE' && detail) {
         try {
             const fileData = JSON.parse(detail);
-            setFiles(prev => prev.filter(f => f.id !== fileData.id));
-            handleLog(`Deleted ${fileData.name}`, 'warning');
-            // Close file if it was open
-            if (activeFile?.id === fileData.id) {
-                setActiveFile(null);
+            const itemToDelete = files.find(f => f.id === fileData.id);
+
+            if (itemToDelete?.type === 'folder') {
+                // Recursively collect all descendant IDs
+                const getDescendantIds = (parentId: string): string[] => {
+                    const children = files.filter(f => f.parentId === parentId);
+                    let ids: string[] = [];
+                    for (const child of children) {
+                        ids.push(child.id);
+                        if (child.type === 'folder') {
+                            ids = ids.concat(getDescendantIds(child.id));
+                        }
+                    }
+                    return ids;
+                };
+                const idsToDelete = [fileData.id, ...getDescendantIds(fileData.id)];
+                setFiles(prev => prev.filter(f => !idsToDelete.includes(f.id)));
+                handleLog(`Deleted folder ${fileData.name} and its contents`, 'warning');
+
+                // Close any open file that was inside the deleted folder
+                if (activeFile && idsToDelete.includes(activeFile.id)) {
+                    setActiveFile(null);
+                }
+            } else {
+                setFiles(prev => prev.filter(f => f.id !== fileData.id));
+                handleLog(`Deleted ${fileData.name}`, 'warning');
+                // Close file if it was open
+                if (activeFile?.id === fileData.id) {
+                    setActiveFile(null);
+                }
             }
-            // Close rename modal if it was for this file
+
+            // Close rename modal if it was for the deleted item
             if (renamingFile?.id === fileData.id) {
                 setRenamingFile(null);
                 setNewFileName('');
@@ -386,7 +412,15 @@ export default function App() {
           </div>
           
           {/* Gesture Control Legend */}
-          <div className="flex-none grid grid-cols-2 md:grid-cols-5 gap-4 h-20">
+          <div className="flex-none grid grid-cols-3 md:grid-cols-6 gap-3 h-20">
+               <div className="bg-neutral-900/50 border border-green-500/30 px-3 rounded flex items-center gap-2">
+                  <div className="bg-green-500/20 p-1.5 rounded text-green-400"><FolderOpen size={14} /></div>
+                  <div>
+                    <div className="text-[10px] font-bold text-white">ENTER FOLDER</div>
+                    <div className="text-[9px] text-neutral-400">Drag + Palm</div>
+                  </div>
+               </div>
+
                <div className="bg-neutral-900/50 border border-purple-500/30 px-3 rounded flex items-center gap-2">
                   <div className="bg-purple-500/20 p-1.5 rounded text-purple-400"><MousePointer2 size={14} /></div>
                   <div>
@@ -407,7 +441,7 @@ export default function App() {
                   <div className="bg-cyan-500/20 p-1.5 rounded text-cyan-400"><FileText size={14} /></div>
                   <div>
                     <div className="text-[10px] font-bold text-white">OPEN</div>
-                    <div className="text-[9px] text-neutral-400">Drag + Hand 2 Palm</div>
+                    <div className="text-[9px] text-neutral-400">Drag + Palm</div>
                   </div>
                </div>
 
@@ -415,7 +449,7 @@ export default function App() {
                   <div className="bg-cyan-500/20 p-1.5 rounded text-cyan-400"><Save size={14} /></div>
                   <div>
                     <div className="text-[10px] font-bold text-white">SAVE</div>
-                    <div className="text-[9px] text-neutral-400">Thumb Up (Hold)</div>
+                    <div className="text-[9px] text-neutral-400">Thumb Up</div>
                   </div>
                </div>
 
@@ -423,7 +457,7 @@ export default function App() {
                   <div className="bg-amber-500/20 p-1.5 rounded text-amber-400"><RotateCcw size={14} /></div>
                   <div>
                     <div className="text-[10px] font-bold text-white">REVERT</div>
-                    <div className="text-[9px] text-neutral-400">Thumb Down (Hold)</div>
+                    <div className="text-[9px] text-neutral-400">Thumb Down</div>
                   </div>
                </div>
           </div>

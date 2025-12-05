@@ -27,11 +27,7 @@ App.tsx ← FileSystemInterface ← gesture-based navigation/actions
 
 - **`hooks/useLiveSession.ts`**: Core hook managing MediaPipe gesture recognition and webcam stream. Exposes `landmarks` (hand positions) and `gestures` (recognized gestures like "Closed_Fist", "Open_Palm").
 
-- **`components/FileSystemInterface.tsx`**: Spatial UI layer. Translates hand landmarks to cursor positions and implements gesture-based interactions:
-  - Pinch + hold = navigate folders
-  - Drag file + open palm (second hand) = open file viewer
-  - Thumb up/down = save/revert file
-  - Closed fist = close file
+- **`components/FileSystemInterface.tsx`**: Spatial UI layer. Translates hand landmarks to cursor positions and implements gesture-based interactions. See README.md for current gesture controls.
 
 - **`constants.ts`**: Contains `FILES_DB` - the mock file system data structure with folders and file contents.
 

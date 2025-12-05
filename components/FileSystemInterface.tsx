@@ -38,6 +38,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
   const [floatingFile, setFloatingFile] = useState<{id: string, x: number, y: number, scale: number} | null>(null);
   const [actionStatus, setActionStatus] = useState<'idle' | 'ready' | 'ready_rename' | 'ready_delete' | 'executing'>('idle');
 
+
   // Logic State
   const stateRef = useRef({
     cursorX: 0,
@@ -70,6 +71,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
   const getDistance = (p1: NormalizedLandmark, p2: NormalizedLandmark) => {
     return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
   };
+
 
   // Detect horizontal pointing gesture (index finger pointing sideways)
   const isHorizontalPointing = (hand: NormalizedLandmark[]) => {
@@ -315,11 +317,12 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     // --- 1. TRACK CURSOR (Primary Hand) ---
     const primaryHand = landmarks[0];
     const rect = containerRef.current.getBoundingClientRect();
-    
+
     // Map Coords (Mirror Mode: x = 1 - x)
     const indexTip = primaryHand[8];
     const thumbTip = primaryHand[4];
-    
+    const wrist = primaryHand[0];
+
     const targetX = (1 - indexTip.x) * rect.width;
     const targetY = indexTip.y * rect.height;
 
@@ -407,7 +410,8 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     if (isPrimaryPinching && !stateRef.current.wasPinching) {
         stateRef.current.pinchStartX = cursorX;
         stateRef.current.pinchStartY = cursorY;
-        stateRef.current.potentialTargetId = hitId;
+        // Only set potential target if it's an actual file/folder, not BACK_BUTTON
+        stateRef.current.potentialTargetId = (hitId && hitId !== 'BACK_BUTTON') ? hitId : null;
     } else if (!isPrimaryPinching && stateRef.current.wasPinching) {
         stateRef.current.potentialTargetId = null;
     }
@@ -423,10 +427,9 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
        isSecondaryPinching = getDistance(secIndex, secThumb) < 0.05;
     }
 
-    // --- 4. NAVIGATION LOGIC ---
-    const isInteracting = (isPrimaryPinching || isSecondaryPinching) && hitId;
+    // --- 4. BACK BUTTON NAVIGATION ---
+    // Pinch + Hold on BACK_BUTTON to go up one level
     const hitFile = hitId === 'BACK_BUTTON' ? null : visibleFiles.find(f => f.id === hitId);
-    const isNavigable = hitId === 'BACK_BUTTON' || (hitFile && hitFile.type === 'folder');
 
     if (hitId !== stateRef.current.lastHoverId) {
         setActivationProgress(0);
@@ -434,44 +437,40 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
         stateRef.current.lastHoverId = hitId;
     }
 
-    if (isInteracting && isNavigable && !floatingFile) {
+    // Back button navigation only
+    if (isPrimaryPinching && !floatingFile && hitId === 'BACK_BUTTON' && currentPath.length > 0) {
         if (stateRef.current.activationStartTime === 0) {
             stateRef.current.activationStartTime = now;
         }
-
-        const requiredTime = isSecondaryPinching ? 100 : 1000; // 1s Hold
         const elapsed = now - stateRef.current.activationStartTime;
-        const progress = Math.min(100, (elapsed / requiredTime) * 100);
+        const progress = Math.min(100, (elapsed / 500) * 100); // 500ms hold
         setActivationProgress(progress);
 
         if (progress >= 100) {
-            if (hitId === 'BACK_BUTTON') {
-                setCurrentPath(prev => prev.slice(0, -1));
-                onAction?.("NAVIGATE", "Went up one level");
-            } else if (hitFile) {
-                setCurrentPath(prev => [...prev, hitFile.id]);
-                onAction?.("NAVIGATE", `Opened ${hitFile.name}`);
-            }
+            setCurrentPath(prev => prev.slice(0, -1));
+            onAction?.("NAVIGATE", "Went up one level");
             setActivationProgress(0);
             stateRef.current.activationStartTime = now + 1000;
+            // Reset drag state so user can drag again after navigation
+            stateRef.current.potentialTargetId = null;
+            stateRef.current.wasPinching = false;
         }
-
-    } else {
+    } else if (!isPrimaryPinching || hitId !== 'BACK_BUTTON') {
         setActivationProgress(0);
         stateRef.current.activationStartTime = 0;
     }
 
 
-    // --- 5. DRAG LOGIC ---
+    // --- 5. DRAG LOGIC (Files AND Folders) ---
     if (isPrimaryPinching && !floatingFile && stateRef.current.potentialTargetId) {
         const target = visibleFiles.find(f => f.id === stateRef.current.potentialTargetId);
-        if (target && target.type !== 'folder') {
+        if (target) {
             const moveDist = Math.sqrt(
-                Math.pow(cursorX - stateRef.current.pinchStartX, 2) + 
+                Math.pow(cursorX - stateRef.current.pinchStartX, 2) +
                 Math.pow(cursorY - stateRef.current.pinchStartY, 2)
             );
-            const DRAG_THRESHOLD = 40; 
-            
+            const DRAG_THRESHOLD = 40;
+
             if (moveDist > DRAG_THRESHOLD) {
                 setDraggedFileId(target.id);
                 setFloatingFile({
@@ -512,14 +511,24 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
 
             const elapsed = now - stateRef.current.triggerStartTime;
             if (elapsed > 300) {
-                const file = files.find(f => f.id === floatingFile.id);
-                if (file) {
-                    onAction?.("OPEN_FILE", JSON.stringify({ id: file.id, name: file.name, content: file.content }));
+                const item = files.find(f => f.id === floatingFile.id);
+                if (item) {
+                    if (item.type === 'folder') {
+                        // ENTER FOLDER: Palm gesture on dragged folder
+                        setCurrentPath(prev => [...prev, item.id]);
+                        onAction?.("NAVIGATE", `Entered ${item.name}`);
+                    } else {
+                        // OPEN FILE: Palm gesture on dragged file
+                        onAction?.("OPEN_FILE", JSON.stringify({ id: item.id, name: item.name, content: item.content }));
+                    }
                 }
                 setFloatingFile(null);
                 setDraggedFileId(null);
                 setActionStatus('idle');
                 stateRef.current.triggerStartTime = 0;
+                // Reset drag state so user can drag again after navigation
+                stateRef.current.potentialTargetId = null;
+                stateRef.current.wasPinching = false;
             }
         } else if (isReadyRename) {
             // TRIGGER RENAME: Secondary Hand Horizontal Pointing
@@ -699,15 +708,15 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
 
   return (
     <div className="absolute inset-0 z-20 pointer-events-none font-sans select-none">
-      
+
       {/* Sidebar - Hidden when file is open */}
       <div className={`
         absolute left-0 top-0 bottom-0 w-[280px] bg-neutral-900/80 backdrop-blur-xl border-r border-white/10 flex flex-col transition-all duration-300
         ${isFileOpen ? '-translate-x-full opacity-0' : 'translate-x-0 opacity-100'}
       `}>
-        
+
         {/* Header */}
-        <div 
+        <div
             className={`
                h-[60px] flex items-center px-6 gap-3 transition-colors duration-300
                ${hoveredId === 'BACK_BUTTON' ? 'bg-purple-900/40' : 'bg-transparent'}
@@ -733,8 +742,8 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
         {/* File List */}
         <div className="flex-1 overflow-y-auto py-2">
           {visibleFiles.map(file => (
-            <div 
-               key={file.id} 
+            <div
+               key={file.id}
                className={`
                  relative flex items-center gap-4 px-6 h-[56px] transition-all duration-200 border-l-2
                  ${hoveredId === file.id ? 'bg-white/5 border-cyan-500 pl-8' : 'border-transparent'}
@@ -750,7 +759,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
                       <FileCode size={18} className="text-cyan-400" />
                   </div>
               )}
-              
+
               <div className="flex flex-col">
                   <span className={`text-sm ${hoveredId === file.id ? 'text-white font-semibold' : 'text-neutral-300'}`}>
                       {file.name}
@@ -798,25 +807,33 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
                 <div className="absolute inset-0 bg-red-500/10 animate-pulse" />
              )}
 
-             <FileCode size={32} className={
-               actionStatus === 'ready' ? 'text-cyan-400' :
-               actionStatus === 'ready_rename' ? 'text-amber-400' :
-               actionStatus === 'ready_delete' ? 'text-red-500' : 'text-purple-400'
-             } />
+             {(() => {
+               const item = files.find(f => f.id === floatingFile.id);
+               const isFolder = item?.type === 'folder';
+               const iconColor = actionStatus === 'ready' ? 'text-cyan-400' :
+                                 actionStatus === 'ready_rename' ? 'text-amber-400' :
+                                 actionStatus === 'ready_delete' ? 'text-red-500' : 'text-purple-400';
+               return isFolder ? <Folder size={32} className={iconColor} /> : <FileCode size={32} className={iconColor} />;
+             })()}
              <div className="flex flex-col min-w-0 z-10">
                 <span className="text-xs font-bold text-white truncate max-w-[120px]">
                    {files.find(f => f.id === floatingFile.id)?.name}
                 </span>
                 <span className="text-[9px] text-neutral-400 font-mono">
-                  {actionStatus === 'ready' ? 'OPENING...' :
-                   actionStatus === 'ready_rename' ? 'RENAMING...' :
-                   actionStatus === 'ready_delete' ? 'SCISSORS READY' : 'DRAGGING'}
+                  {(() => {
+                    const item = files.find(f => f.id === floatingFile.id);
+                    const isFolder = item?.type === 'folder';
+                    if (actionStatus === 'ready') return isFolder ? 'ENTERING...' : 'OPENING...';
+                    if (actionStatus === 'ready_rename') return 'RENAMING...';
+                    if (actionStatus === 'ready_delete') return 'SCISSORS READY';
+                    return 'DRAGGING';
+                  })()}
                 </span>
              </div>
            </div>
            {actionStatus === 'ready' && (
              <div className="absolute -bottom-8 bg-cyan-500 text-black font-bold text-[10px] px-3 py-1 rounded-full animate-pulse whitespace-nowrap">
-               HOLDING FOR OPEN...
+               {files.find(f => f.id === floatingFile.id)?.type === 'folder' ? 'HOLDING TO ENTER...' : 'HOLDING FOR OPEN...'}
              </div>
            )}
            {actionStatus === 'ready_rename' && (

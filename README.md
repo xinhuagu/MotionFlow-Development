@@ -33,16 +33,26 @@ Open `http://localhost:3000` and allow camera access.
 
 ## Gesture Controls
 
-| Gesture | Action |
-|---------|--------|
-| Point + Pinch Hold | Navigate into folder |
-| Two Index Fingers Touch | Create new file |
-| Drag + Open Palm | Open file viewer |
-| Drag + Horizontal Point | Rename file |
-| Drag + Scissors Cut | Delete file |
-| Thumb Up (hold) | Save file |
-| Thumb Down (hold) | Revert changes |
-| Closed Fist (hold) | Close file |
+### File Browser Mode
+
+| Gesture | Action | How To |
+|---------|--------|--------|
+| Drag Folder + Open Palm | Enter folder | Hand 1: Pinch folder and drag out → Hand 2: Show open palm (300ms) |
+| Drag File + Open Palm | Open file | Hand 1: Pinch file and drag out → Hand 2: Show open palm (300ms) |
+| Pinch Hold on Back | Go back | Pinch on "RETURN" header and hold for 500ms |
+| Two Fingers Touch | Create file | Both hands: Touch index fingers together and hold (1s) |
+| Drag + Horizontal Point | Rename | Hand 1: Drag item → Hand 2: Point index finger sideways (500ms) |
+| Drag + Scissors Cut ✂️ | Delete | Hand 1: Drag item → Hand 2: Victory sign ✌️ then close fingers like scissors |
+
+### File Editor Mode (when file is open)
+
+| Gesture | Action | How To |
+|---------|--------|--------|
+| Thumb Up 👍 | Save file | Hold thumb up for 1 second |
+| Thumb Down 👎 | Revert changes | Hold thumb down for 1 second |
+| Closed Fist ✊ | Close file | Hold closed fist for 1 second |
+| Horizontal Point | Rename file | Point index finger sideways and hold (800ms) |
+| Two-Hand Spread | Zoom text | Use both hands, spread/pinch to adjust font size |
 
 ## Tech Stack
 
@@ -132,11 +142,11 @@ MediaPipe runs entirely in the browser using WebAssembly. It detects up to 2 han
 ### 2. Gesture Recognition
 
 Gestures used in this application:
-- `Pinch & Hold` — Drag file
+- `Pinch & Drag` — Drag files or folders
 - `Two Fingers Touch` — Create new file (both index fingers touching)
-- `Open_Palm` — Open file (with second hand while dragging)
-- `Horizontal Point` — Rename file (index finger pointing sideways)
-- `Victory + Cut` — Delete file (scissors gesture then close fingers)
+- `Open_Palm` — Enter folder or open file (with second hand while dragging)
+- `Horizontal Point` — Rename file/folder (index finger pointing sideways)
+- `Victory + Cut` — Delete file/folder (scissors gesture then close fingers)
 - `Closed_Fist` — Close file
 - `Thumb_Up` — Save file
 - `Thumb_Down` — Revert changes
@@ -152,9 +162,10 @@ screenY = landmark.y * containerHeight
 ### 4. Interaction Model
 
 Actions use a **progress-based activation** system:
-- Single-hand pinch + hold (1 second) → Navigate
-- Dual-hand pinch → Instant click
-- Gesture hold (1 second) → File operations
+- Drag + Palm (300ms) → Enter folder or open file
+- Drag + Point (500ms) → Rename
+- Drag + Scissors cut → Delete
+- Gesture hold (1 second) → Save/Revert/Close
 
 This prevents accidental triggers and provides visual feedback via progress rings.
 
