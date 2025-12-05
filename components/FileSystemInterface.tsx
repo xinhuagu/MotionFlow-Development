@@ -67,13 +67,12 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     zoomStableStart: 0,
     isZoomLocked: false,
     dropCooldownUntil: 0,
-    // Shake Detection State (for number mode toggle)
-    lastWristX: 0,
-    lastWristY: 0,
-    shakeDirectionChanges: 0,
-    lastShakeDirection: 0, // -1 = negative, 1 = positive
-    shakeStartTime: 0,
-    lastShakeToggleTime: 0,
+    // Fist Bump Detection State (for number mode toggle)
+    lastFistBumpTime: 0,
+    fistBumpCount: 0,
+    hadTwoHands: false,
+    lostDetectionTime: 0,
+    lastToggleTime: 0,
     // Number detection stability
     lastDetectedNumber: 0,
     numberStableStartTime: 0,
@@ -113,70 +112,126 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
   // American: 1=index, 2=index+middle (V), 3=index+middle+ring, 4=index+middle+ring+pinky, 5=all
   const detectNumberGesture = (hand: NormalizedLandmark[]): number | null => {
     const thumbTip = hand[4];
+    const thumbIp = hand[3];
     const thumbMcp = hand[2];
     const indexTip = hand[8];
+    const indexDip = hand[7];
     const indexPip = hand[6];
     const indexMcp = hand[5];
     const middleTip = hand[12];
+    const middleDip = hand[11];
     const middlePip = hand[10];
     const middleMcp = hand[9];
     const ringTip = hand[16];
+    const ringDip = hand[15];
     const ringPip = hand[14];
     const ringMcp = hand[13];
     const pinkyTip = hand[20];
+    const pinkyDip = hand[19];
     const pinkyPip = hand[18];
     const pinkyMcp = hand[17];
     const wrist = hand[0];
 
     // Calculate hand span (distance from thumb tip to pinky tip)
-    // Open palm has large span, closed hand has small span
     const handSpan = getDistance(thumbTip, pinkyTip);
-    const isOpenPalm = handSpan > 0.2; // Lower threshold for open palm detection
+    const isOpenPalm = handSpan > 0.2;
 
-    // For thumb: check if it's extended outward (away from palm)
-    // Use lower threshold - thumb just needs to be slightly open
+    // For thumb: check if it's extended outward from palm
+    // Use distance from thumb tip to index MCP as reference
     const thumbToIndexMcp = getDistance(thumbTip, indexMcp);
-    const thumbExtended = thumbToIndexMcp > 0.06; // Lowered from 0.1 to 0.06
+    const thumbExtended = thumbToIndexMcp > 0.08;
 
-    // Check if each finger is curled (tip close to MCP = curled)
-    const CURL_THRESHOLD = 0.07;
-    const indexCurled = getDistance(indexTip, indexMcp) < CURL_THRESHOLD;
-    const middleCurled = getDistance(middleTip, middleMcp) < CURL_THRESHOLD;
-    const ringCurled = getDistance(ringTip, ringMcp) < CURL_THRESHOLD;
-    const pinkyCurled = getDistance(pinkyTip, pinkyMcp) < 0.06; // Pinky is shorter
+    // Finger extension detection using TIP vs PIP comparison
+    // When finger is extended: tip.y < pip.y (tip is ABOVE pip on screen, lower Y value)
+    // When finger is curled: tip.y >= pip.y (tip is AT or BELOW pip)
+    // Note: Y axis is inverted in screen coordinates (0 at top)
 
-    // Finger is extended if NOT curled
-    const indexExtended = !indexCurled;
-    const middleExtended = !middleCurled;
-    const ringExtended = !ringCurled;
-    const pinkyExtended = !pinkyCurled;
+    // Additional check: use DIP joint for more reliable detection
+    // Extended: tip is above DIP, which is above PIP
+    // Curled: tip is at or below DIP level
 
-    // Count extended fingers (excluding thumb)
-    const extendedFingers = [indexExtended, middleExtended, ringExtended, pinkyExtended].filter(Boolean).length;
+    const isFingerExtended = (tip: NormalizedLandmark, dip: NormalizedLandmark, pip: NormalizedLandmark, mcp: NormalizedLandmark) => {
+      // A finger is extended if:
+      // 1. The tip is above (lower Y) than the PIP joint
+      // 2. The tip is far enough from MCP (finger straightened out)
+      const tipAbovePip = tip.y < pip.y;
+      const tipAboveDip = tip.y < dip.y;
+      const tipMcpDist = getDistance(tip, mcp);
 
-    // PRIORITY 1: Open palm detection (hand span method)
-    // If hand span is large, it's definitely 5
-    if (isOpenPalm && thumbExtended) {
+      // Extended = tip is above PIP AND tip is reasonably far from MCP
+      return tipAbovePip && tipMcpDist > 0.08;
+    };
+
+    const isFingerCurled = (tip: NormalizedLandmark, dip: NormalizedLandmark, pip: NormalizedLandmark, mcp: NormalizedLandmark) => {
+      // A finger is curled if:
+      // 1. The tip is at or below (higher Y) the PIP joint
+      // OR tip is very close to palm/MCP
+      const tipBelowPip = tip.y >= pip.y - 0.02; // Small tolerance
+      const tipCloseToMcp = getDistance(tip, mcp) < 0.10;
+
+      return tipBelowPip || tipCloseToMcp;
+    };
+
+    const indexExtended = isFingerExtended(indexTip, indexDip, indexPip, indexMcp);
+    const middleExtended = isFingerExtended(middleTip, middleDip, middlePip, middleMcp);
+    const ringExtended = isFingerExtended(ringTip, ringDip, ringPip, ringMcp);
+    const pinkyExtended = isFingerExtended(pinkyTip, pinkyDip, pinkyPip, pinkyMcp);
+
+    const indexCurled = isFingerCurled(indexTip, indexDip, indexPip, indexMcp);
+    const middleCurled = isFingerCurled(middleTip, middleDip, middlePip, middleMcp);
+    const ringCurled = isFingerCurled(ringTip, ringDip, ringPip, ringMcp);
+    const pinkyCurled = isFingerCurled(pinkyTip, pinkyDip, pinkyPip, pinkyMcp);
+
+    // Count extended fingers
+    const extendedCount = [indexExtended, middleExtended, ringExtended, pinkyExtended].filter(Boolean).length;
+
+    // PRIORITY 1: Open palm = 5 (use hand span)
+    if (isOpenPalm && thumbExtended && extendedCount >= 3) {
       return 5;
     }
 
-    // PRIORITY 2: Check specific patterns
+    // PRIORITY 2: German style (thumb extended)
     if (thumbExtended) {
-      // German style: thumb participates in counting
-      if (extendedFingers === 0) return 1; // Only thumb
-      if (extendedFingers === 1 && indexExtended) return 2; // thumb + index
-      if (extendedFingers === 2 && indexExtended && middleExtended) return 3; // thumb + index + middle
-      // For 4: need exactly index+middle+ring extended, pinky curled
+      // 1: Only thumb extended, all four fingers curled
+      if (indexCurled && middleCurled && ringCurled && pinkyCurled) return 1;
+      if (extendedCount === 0) return 1;
+
+      // 2: Thumb + index only
+      if (indexExtended && middleCurled && ringCurled && pinkyCurled) return 2;
+      if (indexExtended && !middleExtended && !ringExtended && !pinkyExtended) return 2;
+
+      // 3: Thumb + index + middle
+      if (indexExtended && middleExtended && ringCurled && pinkyCurled) return 3;
+      if (indexExtended && middleExtended && !ringExtended && !pinkyExtended) return 3;
+
+      // 4: Thumb + index + middle + ring (no pinky)
       if (indexExtended && middleExtended && ringExtended && pinkyCurled) return 4;
-      // Otherwise if 3+ fingers, assume 5
-      if (extendedFingers >= 3) return 5;
+      if (indexExtended && middleExtended && ringExtended && !pinkyExtended) return 4;
+
+      // 5: All fingers extended
+      if (extendedCount >= 4) return 5;
+
+      // Fallback based on extended count + thumb
+      return Math.min(extendedCount + 1, 5);
     } else {
-      // American style: thumb is tucked, only count other fingers
-      if (extendedFingers === 0) return null;
-      if (extendedFingers === 1 && indexExtended) return 1; // index only
-      if (extendedFingers === 2 && indexExtended && middleExtended) return 2; // V sign
-      if (extendedFingers === 3 && indexExtended && middleExtended && ringExtended) return 3;
-      if (extendedFingers >= 4) return 4; // four fingers (no thumb)
+      // American style (thumb tucked)
+      // 1: Only index
+      if (indexExtended && middleCurled && ringCurled && pinkyCurled) return 1;
+      if (indexExtended && !middleExtended && !ringExtended && !pinkyExtended) return 1;
+
+      // 2: Index + middle (V sign)
+      if (indexExtended && middleExtended && ringCurled && pinkyCurled) return 2;
+      if (indexExtended && middleExtended && !ringExtended && !pinkyExtended) return 2;
+
+      // 3: Index + middle + ring
+      if (indexExtended && middleExtended && ringExtended && pinkyCurled) return 3;
+      if (indexExtended && middleExtended && ringExtended && !pinkyExtended) return 3;
+
+      // 4: All four fingers (no thumb)
+      if (extendedCount >= 4) return 4;
+
+      // Fallback
+      if (extendedCount > 0) return extendedCount;
     }
 
     return null;
@@ -187,102 +242,80 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
   const visibleFiles = files.filter(f => f.parentId === currentFolderId);
 
   useEffect(() => {
-    if (!landmarks || landmarks.length === 0 || !containerRef.current) return;
+    // Handle no hands detected - show 0 in number mode
+    if (!landmarks || landmarks.length === 0 || !containerRef.current) {
+      if (isNumberMode) {
+        // No hands detected, report 0
+        if (stateRef.current.confirmedNumber !== 0) {
+          stateRef.current.confirmedNumber = 0;
+          stateRef.current.lastDetectedNumber = 0;
+          onAction?.("NUMBER_DETECTED", "0");
+        }
+      }
+      return;
+    }
     const now = Date.now();
     const primaryHand = landmarks[0];
     const primaryGesture = gestures[0] || 'None';
 
-    // --- SHAKE DETECTION (for number mode toggle) ---
-    // Works with both palm-facing and back-facing fist by detecting movement in any direction
-    const SHAKE_COOLDOWN = 1500; // 1.5s cooldown between toggles
-    const SHAKE_WINDOW = 1000; // 1 second window for shake detection
-    const SHAKE_THRESHOLD = 0.025; // Minimum movement to count as direction change
-    const SHAKE_COUNT_NEEDED = 3; // Need 3-4 direction changes
+    // --- FIST BUMP DETECTION (for number mode toggle) ---
+    // Detect when two hands collide by watching for detection loss
+    // Pattern: 2 hands -> lost detection -> 2 hands = 1 bump
+    // 2 bumps within 2 seconds = toggle
+    const BUMP_COOLDOWN = 1500; // 1.5s cooldown between toggles
+    const BUMP_WINDOW = 2500; // 2.5 second window for detecting 2 bumps
+    const LOST_DETECTION_MAX = 500; // Max time detection can be lost (ms)
 
-    // Custom fist detection: all fingers curled (tips close to palm/MCP)
-    // This works regardless of hand orientation (palm or back facing camera)
-    const detectClosedFist = (hand: NormalizedLandmark[]): boolean => {
-      const wrist = hand[0];
-      const indexTip = hand[8], indexMcp = hand[5];
-      const middleTip = hand[12], middleMcp = hand[9];
-      const ringTip = hand[16], ringMcp = hand[13];
-      const pinkyTip = hand[20], pinkyMcp = hand[17];
-      const thumbTip = hand[4], thumbIp = hand[3];
+    const hasTwoHands = landmarks.length >= 2;
 
-      // Check all fingers are curled: tip is close to MCP or wrist
-      const CURL_THRESHOLD = 0.08;
-      const indexCurled = getDistance(indexTip, indexMcp) < CURL_THRESHOLD || getDistance(indexTip, wrist) < 0.15;
-      const middleCurled = getDistance(middleTip, middleMcp) < CURL_THRESHOLD || getDistance(middleTip, wrist) < 0.15;
-      const ringCurled = getDistance(ringTip, ringMcp) < CURL_THRESHOLD || getDistance(ringTip, wrist) < 0.15;
-      const pinkyCurled = getDistance(pinkyTip, pinkyMcp) < CURL_THRESHOLD || getDistance(pinkyTip, wrist) < 0.15;
-      const thumbCurled = getDistance(thumbTip, thumbIp) < 0.05 || getDistance(thumbTip, indexMcp) < 0.1;
+    if (now - stateRef.current.lastToggleTime > BUMP_COOLDOWN) {
+      if (hasTwoHands) {
+        // We have two hands now
+        if (stateRef.current.lostDetectionTime > 0) {
+          // We just recovered from lost detection
+          const lostDuration = now - stateRef.current.lostDetectionTime;
 
-      // At least 4 fingers must be curled for a fist
-      const curledCount = [indexCurled, middleCurled, ringCurled, pinkyCurled].filter(Boolean).length;
-      return curledCount >= 3; // Allow some tolerance
-    };
-
-    const isFist = primaryGesture === 'Closed_Fist' || detectClosedFist(primaryHand);
-
-    if (isFist && now - stateRef.current.lastShakeToggleTime > SHAKE_COOLDOWN) {
-      const wristX = primaryHand[0].x;
-      const wristY = primaryHand[0].y;
-
-      // Initialize on first fist detection
-      if (stateRef.current.shakeStartTime === 0) {
-        stateRef.current.shakeStartTime = now;
-        stateRef.current.lastWristX = wristX;
-        stateRef.current.lastWristY = wristY;
-        stateRef.current.shakeDirectionChanges = 0;
-        stateRef.current.lastShakeDirection = 0;
-      }
-
-      // Check if still within shake window
-      if (now - stateRef.current.shakeStartTime < SHAKE_WINDOW) {
-        const deltaX = wristX - stateRef.current.lastWristX;
-        const deltaY = wristY - stateRef.current.lastWristY;
-
-        // Use whichever axis has more movement (supports horizontal or vertical shake)
-        const useXAxis = Math.abs(deltaX) > Math.abs(deltaY);
-        const delta = useXAxis ? deltaX : deltaY;
-
-        if (Math.abs(delta) > SHAKE_THRESHOLD) {
-          const newDirection = delta > 0 ? 1 : -1;
-
-          // Count direction change
-          if (stateRef.current.lastShakeDirection !== 0 && newDirection !== stateRef.current.lastShakeDirection) {
-            stateRef.current.shakeDirectionChanges++;
-          }
-
-          stateRef.current.lastShakeDirection = newDirection;
-          stateRef.current.lastWristX = wristX;
-          stateRef.current.lastWristY = wristY;
-
-          // Check if shake detected
-          if (stateRef.current.shakeDirectionChanges >= SHAKE_COUNT_NEEDED) {
-            if (isNumberMode) {
-              onAction?.("EXIT_NUMBER_MODE");
-            } else {
-              onAction?.("ENTER_NUMBER_MODE");
+          // If detection was lost briefly (fist bump), count it
+          if (lostDuration < LOST_DETECTION_MAX && stateRef.current.hadTwoHands) {
+            // This was a bump!
+            if (stateRef.current.fistBumpCount === 0) {
+              // First bump
+              stateRef.current.fistBumpCount = 1;
+              stateRef.current.lastFistBumpTime = now;
+            } else if (now - stateRef.current.lastFistBumpTime < BUMP_WINDOW) {
+              // Second bump within window - toggle!
+              stateRef.current.fistBumpCount = 0;
+              stateRef.current.lastToggleTime = now;
+              if (isNumberMode) {
+                onAction?.("EXIT_NUMBER_MODE");
+              } else {
+                onAction?.("ENTER_NUMBER_MODE");
+              }
             }
-            stateRef.current.lastShakeToggleTime = now;
-            stateRef.current.shakeStartTime = 0;
-            stateRef.current.shakeDirectionChanges = 0;
+          }
+          stateRef.current.lostDetectionTime = 0;
+        }
+        stateRef.current.hadTwoHands = true;
+      } else {
+        // Less than 2 hands detected
+        if (stateRef.current.hadTwoHands && stateRef.current.lostDetectionTime === 0) {
+          // Just lost detection - record the time
+          stateRef.current.lostDetectionTime = now;
+        } else if (stateRef.current.lostDetectionTime > 0) {
+          // Check if lost for too long
+          const lostDuration = now - stateRef.current.lostDetectionTime;
+          if (lostDuration > LOST_DETECTION_MAX) {
+            // Lost for too long, reset
+            stateRef.current.hadTwoHands = false;
+            stateRef.current.lostDetectionTime = 0;
           }
         }
-      } else {
-        // Reset shake detection if window expired
-        stateRef.current.shakeStartTime = now;
-        stateRef.current.shakeDirectionChanges = 0;
-        stateRef.current.lastShakeDirection = 0;
-        stateRef.current.lastWristX = wristX;
-        stateRef.current.lastWristY = wristY;
       }
-    } else if (!isFist) {
-      // Reset when not fist
-      stateRef.current.shakeStartTime = 0;
-      stateRef.current.shakeDirectionChanges = 0;
-      stateRef.current.lastShakeDirection = 0;
+
+      // Reset bump count if too much time passed
+      if (stateRef.current.fistBumpCount > 0 && now - stateRef.current.lastFistBumpTime > BUMP_WINDOW) {
+        stateRef.current.fistBumpCount = 0;
+      }
     }
 
     // --- NUMBER MODE ---
@@ -1008,8 +1041,8 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
         </div>
       </div>
 
-      {/* Floating File */}
-      {floatingFile && (
+      {/* Floating File - Hidden in number mode */}
+      {floatingFile && !isNumberMode && (
         <div
           className="absolute flex flex-col items-center justify-center z-50"
           style={{

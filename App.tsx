@@ -346,7 +346,7 @@ export default function App() {
 
                    {/* Exit Instructions */}
                    <div className="mt-4 bg-neutral-800/80 text-neutral-400 px-3 py-1.5 rounded text-xs font-mono">
-                     Shake fist to exit
+                     Bump fists twice to exit
                    </div>
                  </div>
                </div>
