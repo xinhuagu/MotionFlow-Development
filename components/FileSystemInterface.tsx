@@ -19,9 +19,10 @@ interface FileSystemInterfaceProps {
   isFileOpen: boolean;
   isRenaming: boolean;
   files: FileItem[];
+  isNumberMode?: boolean;
 }
 
-export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landmarks, gestures, containerRef, onAction, isFileOpen, isRenaming, files }) => {
+export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landmarks, gestures, containerRef, onAction, isFileOpen, isRenaming, files, isNumberMode = false }) => {
   const [currentPath, setCurrentPath] = useState<string[]>([]); // Stack of folder IDs
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [activationProgress, setActivationProgress] = useState(0); // 0 to 100
@@ -66,6 +67,16 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     zoomStableStart: 0,
     isZoomLocked: false,
     dropCooldownUntil: 0,
+    // Shake Detection State (for number mode toggle)
+    lastWristX: 0,
+    shakeDirectionChanges: 0,
+    lastShakeDirection: 0, // -1 = left, 1 = right
+    shakeStartTime: 0,
+    lastShakeToggleTime: 0,
+    // Number detection stability
+    lastDetectedNumber: 0,
+    numberStableStartTime: 0,
+    confirmedNumber: 0,
   });
 
   const getDistance = (p1: NormalizedLandmark, p2: NormalizedLandmark) => {
@@ -95,6 +106,67 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     return indexExtended && middleCurled && isHorizontal;
   };
 
+  // Detect number gesture (supports both German and American styles)
+  // Logic: If thumb is tucked in (curled), use American style; otherwise use German style
+  // German: 1=thumb, 2=thumb+index, 3=thumb+index+middle, 4=thumb+index+middle+ring, 5=all
+  // American: 1=index, 2=index+middle (V), 3=index+middle+ring, 4=index+middle+ring+pinky, 5=all
+  const detectNumberGesture = (hand: NormalizedLandmark[]): number | null => {
+    const thumbTip = hand[4];
+    const thumbIp = hand[3];   // Thumb IP joint
+    const thumbMcp = hand[2];
+    const indexTip = hand[8];
+    const indexPip = hand[6];  // Index PIP joint
+    const indexMcp = hand[5];
+    const middleTip = hand[12];
+    const middlePip = hand[10];
+    const middleMcp = hand[9];
+    const ringTip = hand[16];
+    const ringPip = hand[14];
+    const ringMcp = hand[13];
+    const pinkyTip = hand[20];
+    const pinkyPip = hand[18];
+    const pinkyMcp = hand[17];
+    const wrist = hand[0];
+
+    // For thumb: check if it's extended outward (away from palm)
+    // Thumb is extended if tip is far from index MCP (spread out)
+    const thumbToIndexMcp = getDistance(thumbTip, indexMcp);
+    const thumbExtended = thumbToIndexMcp > 0.1;
+
+    // For other fingers: check if tip is higher (lower Y) than PIP joint
+    // This is more reliable than distance-based detection
+    const indexExtended = indexTip.y < indexPip.y - 0.02;
+    const middleExtended = middleTip.y < middlePip.y - 0.02;
+    const ringExtended = ringTip.y < ringPip.y - 0.02;
+    const pinkyExtended = pinkyTip.y < pinkyPip.y - 0.02;
+
+    // Count extended fingers (excluding thumb)
+    const extendedFingers = [indexExtended, middleExtended, ringExtended, pinkyExtended].filter(Boolean).length;
+
+    // Determine which style based on thumb position
+    if (thumbExtended) {
+      // German style: thumb participates in counting
+      // Count = thumb + other extended fingers
+      const totalFingers = 1 + extendedFingers; // thumb counts as 1
+
+      // Validate German patterns
+      if (extendedFingers === 0) return 1; // Only thumb
+      if (indexExtended && !middleExtended && !ringExtended && !pinkyExtended) return 2; // thumb + index
+      if (indexExtended && middleExtended && !ringExtended && !pinkyExtended) return 3; // thumb + index + middle
+      if (indexExtended && middleExtended && ringExtended && !pinkyExtended) return 4; // thumb + index + middle + ring
+      if (indexExtended && middleExtended && ringExtended && pinkyExtended) return 5; // all fingers
+    } else {
+      // American style: thumb is tucked, only count other fingers
+      if (extendedFingers === 0) return null; // No fingers = no number
+      if (indexExtended && !middleExtended && !ringExtended && !pinkyExtended) return 1; // index only
+      if (indexExtended && middleExtended && !ringExtended && !pinkyExtended) return 2; // V sign
+      if (indexExtended && middleExtended && ringExtended && !pinkyExtended) return 3; // three fingers
+      if (indexExtended && middleExtended && ringExtended && pinkyExtended) return 4; // four fingers (no thumb)
+    }
+
+    return null;
+  };
+
   // Filter files for current view
   const currentFolderId = currentPath.length > 0 ? currentPath[currentPath.length - 1] : null;
   const visibleFiles = files.filter(f => f.parentId === currentFolderId);
@@ -102,6 +174,95 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
   useEffect(() => {
     if (!landmarks || landmarks.length === 0 || !containerRef.current) return;
     const now = Date.now();
+    const primaryHand = landmarks[0];
+    const primaryGesture = gestures[0] || 'None';
+
+    // --- SHAKE DETECTION (for number mode toggle) ---
+    const SHAKE_COOLDOWN = 1500; // 1.5s cooldown between toggles
+    const SHAKE_WINDOW = 1000; // 1 second window for shake detection
+    const SHAKE_THRESHOLD = 0.03; // Minimum X movement to count as direction change
+    const SHAKE_COUNT_NEEDED = 3; // Need 3-4 direction changes
+
+    if (primaryGesture === 'Closed_Fist' && now - stateRef.current.lastShakeToggleTime > SHAKE_COOLDOWN) {
+      const wristX = primaryHand[0].x;
+
+      // Initialize on first fist detection
+      if (stateRef.current.shakeStartTime === 0) {
+        stateRef.current.shakeStartTime = now;
+        stateRef.current.lastWristX = wristX;
+        stateRef.current.shakeDirectionChanges = 0;
+        stateRef.current.lastShakeDirection = 0;
+      }
+
+      // Check if still within shake window
+      if (now - stateRef.current.shakeStartTime < SHAKE_WINDOW) {
+        const deltaX = wristX - stateRef.current.lastWristX;
+
+        if (Math.abs(deltaX) > SHAKE_THRESHOLD) {
+          const newDirection = deltaX > 0 ? 1 : -1;
+
+          // Count direction change
+          if (stateRef.current.lastShakeDirection !== 0 && newDirection !== stateRef.current.lastShakeDirection) {
+            stateRef.current.shakeDirectionChanges++;
+          }
+
+          stateRef.current.lastShakeDirection = newDirection;
+          stateRef.current.lastWristX = wristX;
+
+          // Check if shake detected
+          if (stateRef.current.shakeDirectionChanges >= SHAKE_COUNT_NEEDED) {
+            if (isNumberMode) {
+              onAction?.("EXIT_NUMBER_MODE");
+            } else {
+              onAction?.("ENTER_NUMBER_MODE");
+            }
+            stateRef.current.lastShakeToggleTime = now;
+            stateRef.current.shakeStartTime = 0;
+            stateRef.current.shakeDirectionChanges = 0;
+          }
+        }
+      } else {
+        // Reset shake detection if window expired
+        stateRef.current.shakeStartTime = now;
+        stateRef.current.shakeDirectionChanges = 0;
+        stateRef.current.lastShakeDirection = 0;
+        stateRef.current.lastWristX = wristX;
+      }
+    } else if (primaryGesture !== 'Closed_Fist') {
+      // Reset when not fist
+      stateRef.current.shakeStartTime = 0;
+      stateRef.current.shakeDirectionChanges = 0;
+      stateRef.current.lastShakeDirection = 0;
+    }
+
+    // --- NUMBER MODE ---
+    if (isNumberMode) {
+      // Detect and report number (shake detection above handles exit)
+      const number = detectNumberGesture(primaryHand) ?? 0;
+
+      // Number stability detection - only report when stable for 300ms
+      const NUMBER_STABLE_TIME = 300; // ms to hold before confirming
+
+      if (number === stateRef.current.lastDetectedNumber) {
+        // Same number detected, check if stable long enough
+        if (stateRef.current.numberStableStartTime === 0) {
+          stateRef.current.numberStableStartTime = now;
+        }
+
+        const stableDuration = now - stateRef.current.numberStableStartTime;
+        if (stableDuration >= NUMBER_STABLE_TIME && number !== stateRef.current.confirmedNumber) {
+          // Number has been stable long enough, confirm it
+          stateRef.current.confirmedNumber = number;
+          onAction?.("NUMBER_DETECTED", number.toString());
+        }
+      } else {
+        // Different number detected, reset stability timer
+        stateRef.current.lastDetectedNumber = number;
+        stateRef.current.numberStableStartTime = now;
+      }
+
+      return; // Skip all other interactions in number mode
+    }
 
     // --- RENAME MODE GESTURE HANDLING ---
     if (isRenaming) {
@@ -315,7 +476,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     }
 
     // --- 1. TRACK CURSOR (Primary Hand) ---
-    const primaryHand = landmarks[0];
+    // primaryHand already declared at top of useEffect
     const rect = containerRef.current.getBoundingClientRect();
 
     // Map Coords (Mirror Mode: x = 1 - x)
@@ -582,9 +743,6 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
             const SCISSORS_OPEN_THRESHOLD = 0.04;  // Fingers spread apart
             const SCISSORS_CLOSE_THRESHOLD = 0.02; // Fingers closed together
 
-            // Debug
-            console.log('SCISSORS:', { isReadyDelete, fingerDist, scissorsMode: stateRef.current.scissorsMode, gesture: gestures[1] });
-
             // Enter scissors mode when Victory detected with fingers spread
             if (isReadyDelete && fingerDist > SCISSORS_OPEN_THRESHOLD) {
                 if (!stateRef.current.scissorsMode) {
@@ -626,7 +784,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
         }
     }
 
-  }, [landmarks, gestures, currentPath, visibleFiles, floatingFile, actionStatus, onAction, isFileOpen, isRenaming]);
+  }, [landmarks, gestures, currentPath, visibleFiles, floatingFile, actionStatus, onAction, isFileOpen, isRenaming, isNumberMode]);
 
   // --- RENDERING HELPERS ---
 

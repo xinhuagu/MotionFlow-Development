@@ -30,6 +30,10 @@ export default function App() {
   // Video Display Mode: true = show video, false = show only hand tracking points
   const [showVideo, setShowVideo] = useState(true);
 
+  // Number Mode State: German number gesture recognition
+  const [isNumberMode, setIsNumberMode] = useState(false);
+  const [recognizedNumber, setRecognizedNumber] = useState<number | null>(null);
+
   const handleLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
     setLogs(prev => [...prev, {
       id: Math.random().toString(36).substr(2, 9),
@@ -197,6 +201,20 @@ export default function App() {
         } catch (e) {
             handleLog(`Error deleting file: ${e}`, 'error');
         }
+    } else if (action === 'ENTER_NUMBER_MODE') {
+        setIsNumberMode(true);
+        setRecognizedNumber(0);
+        handleLog('Entered number recognition mode', 'info');
+    } else if (action === 'EXIT_NUMBER_MODE') {
+        setIsNumberMode(false);
+        setRecognizedNumber(null);
+        handleLog('Exited number recognition mode', 'info');
+    } else if (action === 'NUMBER_DETECTED' && detail) {
+        const num = Number.parseInt(detail);
+        if (num !== recognizedNumber) {
+            setRecognizedNumber(num);
+            handleLog(`Number detected: ${num}`, 'success');
+        }
     } else {
        handleLog(`${action}: ${detail}`, 'cmd');
     }
@@ -280,11 +298,12 @@ export default function App() {
                  isFileOpen={!!activeFile}
                  isRenaming={!!renamingFile}
                  files={files}
+                 isNumberMode={isNumberMode}
                />
              )}
 
              {/* Video Toggle Button - Positioned above overlays */}
-             {isConnected && (
+             {isConnected && !isNumberMode && (
                <button
                  onClick={() => setShowVideo(prev => !prev)}
                  className={`
@@ -300,6 +319,34 @@ export default function App() {
                    {showVideo ? 'HIDE FACE' : 'SHOW FACE'}
                  </span>
                </button>
+             )}
+
+             {/* NUMBER MODE OVERLAY */}
+             {isNumberMode && (
+               <div className="absolute inset-0 z-[90] flex flex-col items-center justify-center pointer-events-none">
+                 {/* Mode Indicator */}
+                 <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-amber-500/90 text-black px-6 py-2 rounded-full font-bold text-sm tracking-wider animate-pulse">
+                   NUMBER MODE ACTIVE
+                 </div>
+
+                 {/* Large Number Display */}
+                 <div className="flex flex-col items-center">
+                   <div className={`
+                     text-[200px] font-bold leading-none transition-all duration-200
+                     ${recognizedNumber !== null && recognizedNumber > 0 ? 'text-amber-400 drop-shadow-[0_0_30px_rgba(251,191,36,0.6)]' : 'text-neutral-500'}
+                   `}>
+                     {recognizedNumber !== null ? recognizedNumber : 0}
+                   </div>
+                   <div className="text-neutral-400 text-lg mt-4 font-mono">
+                     {recognizedNumber !== null && recognizedNumber > 0 ? `Detected: ${recognizedNumber}` : 'Show a number gesture (1-5)'}
+                   </div>
+                 </div>
+
+                 {/* Exit Instructions */}
+                 <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-neutral-800/80 text-neutral-300 px-4 py-2 rounded-lg text-sm font-mono">
+                   Shake fist to exit
+                 </div>
+               </div>
              )}
 
              {/* CODE VIEWER MODAL */}
