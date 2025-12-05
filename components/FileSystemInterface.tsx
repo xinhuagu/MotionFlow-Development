@@ -892,10 +892,10 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
   return (
     <div className="absolute inset-0 z-20 pointer-events-none font-sans select-none">
 
-      {/* Sidebar - Hidden when file is open */}
+      {/* Sidebar - Hidden when file is open or in number mode */}
       <div className={`
         absolute left-0 top-0 bottom-0 w-[280px] bg-neutral-900/80 backdrop-blur-xl border-r border-white/10 flex flex-col transition-all duration-300
-        ${isFileOpen ? '-translate-x-full opacity-0' : 'translate-x-0 opacity-100'}
+        ${isFileOpen || isNumberMode ? '-translate-x-full opacity-0' : 'translate-x-0 opacity-100'}
       `}>
 
         {/* Header */}

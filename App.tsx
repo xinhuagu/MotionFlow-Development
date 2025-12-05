@@ -323,28 +323,31 @@ export default function App() {
 
              {/* NUMBER MODE OVERLAY */}
              {isNumberMode && (
-               <div className="absolute inset-0 z-[90] flex flex-col items-center justify-center pointer-events-none">
-                 {/* Mode Indicator */}
-                 <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-amber-500/90 text-black px-6 py-2 rounded-full font-bold text-sm tracking-wider animate-pulse">
-                   NUMBER MODE ACTIVE
-                 </div>
+               <div className="absolute inset-0 z-[90] pointer-events-none">
+                 {/* Left Side Number Display */}
+                 <div className="absolute left-8 top-1/2 -translate-y-1/2 flex flex-col items-center">
+                   {/* Mode Indicator */}
+                   <div className="bg-amber-500/90 text-black px-4 py-1.5 rounded-full font-bold text-xs tracking-wider animate-pulse mb-4">
+                     NUMBER MODE
+                   </div>
 
-                 {/* Large Number Display */}
-                 <div className="flex flex-col items-center">
+                   {/* Number Display */}
                    <div className={`
-                     text-[200px] font-bold leading-none transition-all duration-200
-                     ${recognizedNumber !== null && recognizedNumber > 0 ? 'text-amber-400 drop-shadow-[0_0_30px_rgba(251,191,36,0.6)]' : 'text-neutral-500'}
+                     text-[120px] font-bold leading-none transition-all duration-200
+                     ${recognizedNumber !== null && recognizedNumber > 0 ? 'text-amber-400 drop-shadow-[0_0_20px_rgba(251,191,36,0.6)]' : 'text-neutral-500'}
                    `}>
                      {recognizedNumber !== null ? recognizedNumber : 0}
                    </div>
-                   <div className="text-neutral-400 text-lg mt-4 font-mono">
-                     {recognizedNumber !== null && recognizedNumber > 0 ? `Detected: ${recognizedNumber}` : 'Show a number gesture (1-5)'}
-                   </div>
-                 </div>
 
-                 {/* Exit Instructions */}
-                 <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-neutral-800/80 text-neutral-300 px-4 py-2 rounded-lg text-sm font-mono">
-                   Shake fist to exit
+                   {/* Status Text */}
+                   <div className="text-neutral-400 text-sm mt-2 font-mono">
+                     {recognizedNumber !== null && recognizedNumber > 0 ? `Detected` : 'Show gesture'}
+                   </div>
+
+                   {/* Exit Instructions */}
+                   <div className="mt-4 bg-neutral-800/80 text-neutral-400 px-3 py-1.5 rounded text-xs font-mono">
+                     Shake fist to exit
+                   </div>
                  </div>
                </div>
              )}
