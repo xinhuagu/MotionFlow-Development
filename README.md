@@ -54,13 +54,17 @@ Open `http://localhost:3000` and allow camera access.
 | Horizontal Point | Rename file | Point index finger sideways and hold (800ms) |
 | Two-Hand Spread | Zoom text | Use both hands, spread/pinch to adjust font size |
 
-### Number Recognition Mode
+### Number Recognition Mode (0-10)
 
-A special mode for recognizing number gestures (1-5). Supports both German and American counting styles.
+A special mode for recognizing number gestures using both hands. Count from 0 to 10 by combining numbers from each hand.
+
+![Number Counting Demo](docs/images/count.gif)
 
 | Gesture | Action | How To |
 |---------|--------|--------|
-| Fist + Shake | Toggle number mode | Make a fist and shake 3-4 times (works with palm or back facing camera) |
+| Clap x2 | Toggle number mode | Clap both hands together twice |
+
+**Dual-Hand Counting**: Numbers from both hands are summed together (0-10 range).
 
 **German Style** (thumb extended):
 - 1 = Thumb only
@@ -75,6 +79,11 @@ A special mode for recognizing number gestures (1-5). Supports both German and A
 - 3 = Index + Middle + Ring
 - 4 = Index + Middle + Ring + Pinky
 - 5 = All fingers
+
+**Examples**:
+- Left hand: 3 (German) + Right hand: 2 (American) = **5**
+- Left hand: 5 + Right hand: 5 = **10**
+- No hands detected = **0**
 
 ## Tech Stack
 
@@ -172,8 +181,8 @@ Gestures used in this application:
 - `Closed_Fist` — Close file
 - `Thumb_Up` — Save file
 - `Thumb_Down` — Revert changes
-- `Fist + Shake` — Toggle number recognition mode
-- `Number Gestures (1-5)` — German style (thumb-first) or American style (index-first)
+- `Clap x2` — Toggle number recognition mode (clap hands together twice)
+- `Number Gestures (0-10)` — Dual-hand counting, supports German (thumb-first) and American (index-first) styles
 
 ### 3. Spatial Mapping
 
