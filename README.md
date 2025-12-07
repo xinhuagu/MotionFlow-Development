@@ -1,26 +1,34 @@
 # MotionFlow-Development (v0.0.1)
 
-**Reshaping the Future of Software Development**
-
-A spatial file system interface powered by hand gesture recognition. Navigate, browse, and edit code using natural hand movements.
+Exploring the use of hand gesture motion in UI interaction. This project demonstrates two interaction modes powered by hand gesture recognition.
 
 > Built with AI-assisted development using Claude Code & Google Gemini
 
+## Two Modes
+
+### Mode 1: File System Interface
+Navigate, browse, and edit code using natural hand movements.
+
 ![Demo](docs/images/demo.gif)
+
+### Mode 2: Number Recognition (0-10)
+Count from 0 to 10 using dual-hand gestures. Toggle with double clap.
+
+![Number Counting Demo](docs/images/count.gif)
 
 ## Highlights
 
 - **100% Local** — Runs entirely in your browser, no cloud API required
-- **Gesture Conducting** — Orchestrate your workflow with natural hand movements
-- **Zero Configuration** — Just `npm install` and start conducting
+- **Dual-Mode Interface** — Switch between file system and number recognition
+- **Zero Configuration** — Just `npm install` and start interacting
 
 ## Features
 
-- **Spatial Navigation** — Point and pinch to conduct folder traversal
-- **Dual-Hand Orchestration** — Coordinate both hands like a conductor: one hand positions, the other signals actions
-- **Code Performance** — Open, edit, and save files with gesture commands
-- **File Choreography** — Create, rename, and delete files through expressive motions
-- **Real-Time Tracking** — MediaPipe captures every nuance of your conducting
+- **Spatial Navigation** — Point and pinch to navigate folders
+- **Dual-Hand Orchestration** — Coordinate both hands: one positions, the other signals actions
+- **File Operations** — Open, edit, save, create, rename, and delete files with gestures
+- **Number Counting** — Recognize 0-10 using German or American finger counting styles
+- **Real-Time Tracking** — MediaPipe captures hand movements in real-time
 
 ## Quick Start
 
@@ -56,34 +64,18 @@ Open `http://localhost:3000` and allow camera access.
 
 ### Number Recognition Mode (0-10)
 
-A special mode for recognizing number gestures using both hands. Count from 0 to 10 by combining numbers from each hand.
-
-![Number Counting Demo](docs/images/count.gif)
-
 | Gesture | Action | How To |
 |---------|--------|--------|
 | Clap x2 | Toggle number mode | Clap both hands together twice |
 
 **Dual-Hand Counting**: Numbers from both hands are summed together (0-10 range).
 
-**German Style** (thumb extended):
-- 1 = Thumb only
-- 2 = Thumb + Index
-- 3 = Thumb + Index + Middle
-- 4 = Thumb + Index + Middle + Ring
-- 5 = All fingers
+| Style | 1 | 2 | 3 | 4 | 5 |
+|-------|---|---|---|---|---|
+| German (thumb first) | Thumb | Thumb+Index | +Middle | +Ring | All |
+| American (index first) | Index | Index+Middle | +Ring | +Pinky | All |
 
-**American Style** (thumb tucked):
-- 1 = Index finger only (pointing up)
-- 2 = Index + Middle (V sign)
-- 3 = Index + Middle + Ring
-- 4 = Index + Middle + Ring + Pinky
-- 5 = All fingers
-
-**Examples**:
-- Left hand: 3 (German) + Right hand: 2 (American) = **5**
-- Left hand: 5 + Right hand: 5 = **10**
-- No hands detected = **0**
+**Examples**: Left 3 + Right 2 = **5**, Left 5 + Right 5 = **10**, No hands = **0**
 
 ## Tech Stack
 
