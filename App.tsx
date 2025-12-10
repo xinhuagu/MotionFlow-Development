@@ -325,81 +325,23 @@ export default function App() {
                />
              )}
 
-             {/* Mode Switch Buttons - Positioned below camera */}
+             {/* Video Toggle Button - Bottom right */}
              {isConnected && (
-               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[80] flex items-center gap-2">
-                 {/* File System Mode Button */}
-                 <button
-                   onClick={() => {
-                     setIsNumberMode(false);
-                     setIsDialMode(false);
-                     setRecognizedNumber(null);
-                     handleLog('Switched to File System mode', 'info');
-                   }}
-                   className={`
-                     flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 font-mono text-xs tracking-wider
-                     ${!isNumberMode && !isDialMode
-                       ? 'bg-purple-500/50 border-2 border-purple-400 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]'
-                       : 'bg-neutral-800/50 border border-neutral-600 text-neutral-400 hover:bg-neutral-700/50 hover:text-neutral-300'}
-                   `}
-                 >
-                   <FolderOpen className="w-4 h-4" />
-                   FILE SYSTEM
-                 </button>
-
-                 {/* Number Mode Button */}
-                 <button
-                   onClick={() => {
-                     setIsNumberMode(true);
-                     setIsDialMode(false);
-                     setRecognizedNumber(0);
-                     handleLog('Switched to Number Mode', 'info');
-                   }}
-                   className={`
-                     flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 font-mono text-xs tracking-wider
-                     ${isNumberMode
-                       ? 'bg-amber-500/50 border-2 border-amber-400 text-white shadow-[0_0_15px_rgba(251,191,36,0.4)]'
-                       : 'bg-neutral-800/50 border border-neutral-600 text-neutral-400 hover:bg-neutral-700/50 hover:text-neutral-300'}
-                   `}
-                 >
-                   <Hand className="w-4 h-4" />
-                   NUMBER (0-10)
-                 </button>
-
-                 {/* Dial Mode Button */}
-                 <button
-                   onClick={() => {
-                     setIsDialMode(true);
-                     setIsNumberMode(false);
-                     setDialValue(1);
-                     setDialAngle(0);
-                     handleLog('Switched to Dial Mode (1-100)', 'info');
-                   }}
-                   className={`
-                     flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 font-mono text-xs tracking-wider
-                     ${isDialMode
-                       ? 'bg-emerald-500/50 border-2 border-emerald-400 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]'
-                       : 'bg-neutral-800/50 border border-neutral-600 text-neutral-400 hover:bg-neutral-700/50 hover:text-neutral-300'}
-                   `}
-                 >
-                   <Disc3 className="w-4 h-4" />
-                   DIAL (1-100)
-                 </button>
-
-                 {/* Video Toggle Button */}
-                 <button
-                   onClick={() => setShowVideo(prev => !prev)}
-                   className={`
-                     flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-300
-                     ${showVideo
-                       ? 'bg-cyan-500/30 border border-cyan-500/50 text-cyan-300 hover:bg-cyan-500/40'
-                       : 'bg-neutral-800/50 border border-neutral-600 text-neutral-400 hover:bg-neutral-700/50'}
-                   `}
-                   title={showVideo ? 'Hide camera video' : 'Show camera video'}
-                 >
-                   {showVideo ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
-                 </button>
-               </div>
+               <button
+                 onClick={() => setShowVideo(prev => !prev)}
+                 className={`
+                   absolute bottom-4 right-4 z-[80] flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-300
+                   ${showVideo
+                     ? 'bg-purple-500/30 border border-purple-500/50 text-purple-300 hover:bg-purple-500/40'
+                     : 'bg-cyan-500/30 border border-cyan-500/50 text-cyan-300 hover:bg-cyan-500/40'}
+                 `}
+                 title={showVideo ? 'Hide camera video' : 'Show camera video'}
+               >
+                 {showVideo ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
+                 <span className="text-xs font-mono tracking-wider">
+                   {showVideo ? 'HIDE FACE' : 'SHOW FACE'}
+                 </span>
+               </button>
              )}
 
              {/* NUMBER MODE OVERLAY */}
@@ -431,6 +373,36 @@ export default function App() {
              {/* DIAL MODE OVERLAY */}
              {isDialMode && (
                <div className="absolute inset-0 z-[90] pointer-events-none flex items-center justify-center">
+                 {/* Vertical Volume Bar - Far Left */}
+                 <div className="absolute left-8 top-1/2 -translate-y-1/2 w-8 h-72 rounded-full bg-neutral-800/80 border border-neutral-600 overflow-hidden">
+                   {/* Gradient fill based on value */}
+                   <div
+                     className="absolute bottom-0 left-0 right-0 transition-all duration-150 rounded-b-full"
+                     style={{
+                       height: `${dialValue}%`,
+                       background: `linear-gradient(to top,
+                         #ef4444 0%,
+                         #f97316 20%,
+                         #eab308 40%,
+                         #84cc16 60%,
+                         #22c55e 80%,
+                         #10b981 100%)`
+                     }}
+                   />
+                   {/* Scale marks */}
+                   {[0, 25, 50, 75, 100].map((mark) => (
+                     <div
+                       key={mark}
+                       className="absolute left-0 right-0 h-px bg-white/30"
+                       style={{ bottom: `${mark}%` }}
+                     />
+                   ))}
+                   {/* Glow effect when locked */}
+                   {dialLocked && (
+                     <div className="absolute inset-0 bg-amber-500/20 animate-pulse" />
+                   )}
+                 </div>
+
                  {/* Radio Dial Interface */}
                  <div className="flex flex-col items-center">
                    {/* Mode Indicator */}
@@ -532,15 +504,6 @@ export default function App() {
                      )}
                    </div>
 
-                   {/* Instructions */}
-                   <div className="mt-6 flex flex-col items-center gap-2">
-                     <div className="text-neutral-400 text-sm font-mono">
-                       {dialLocked ? 'Value locked!' : 'Open hand and rotate to adjust'}
-                     </div>
-                     <div className="bg-neutral-800/80 text-neutral-400 px-3 py-1.5 rounded text-xs font-mono">
-                       {dialLocked ? 'Wait for unlock...' : 'Second hand open palm to lock'}
-                     </div>
-                   </div>
                  </div>
                </div>
              )}
@@ -677,55 +640,66 @@ export default function App() {
              )}
           </div>
           
-          {/* Gesture Control Legend */}
-          <div className="flex-none grid grid-cols-3 md:grid-cols-6 gap-3 h-20">
-               <div className="bg-neutral-900/50 border border-green-500/30 px-3 rounded flex items-center gap-2">
-                  <div className="bg-green-500/20 p-1.5 rounded text-green-400"><FolderOpen size={14} /></div>
-                  <div>
-                    <div className="text-[10px] font-bold text-white">ENTER FOLDER</div>
-                    <div className="text-[9px] text-neutral-400">Drag + Palm</div>
-                  </div>
-               </div>
+          {/* Mode Switch Buttons */}
+          <div className="flex-none flex items-center justify-center gap-2 h-12">
+               {/* File System Mode Button */}
+               <button
+                 onClick={() => {
+                   setIsNumberMode(false);
+                   setIsDialMode(false);
+                   setRecognizedNumber(null);
+                   handleLog('Switched to File System mode', 'info');
+                 }}
+                 className={`
+                   flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 text-[10px] font-medium tracking-wide
+                   ${!isNumberMode && !isDialMode
+                     ? 'bg-purple-500/20 border border-purple-400/80 text-purple-200 shadow-[0_0_12px_rgba(168,85,247,0.3)]'
+                     : 'bg-transparent border border-purple-500/20 text-purple-400/60 hover:border-purple-400/40 hover:text-purple-300 hover:bg-purple-500/10'}
+                 `}
+               >
+                 <FolderOpen className="w-3.5 h-3.5" />
+                 <span>FILE SYSTEM</span>
+               </button>
 
-               <div className="bg-neutral-900/50 border border-purple-500/30 px-3 rounded flex items-center gap-2">
-                  <div className="bg-purple-500/20 p-1.5 rounded text-purple-400"><MousePointer2 size={14} /></div>
-                  <div>
-                    <div className="text-[10px] font-bold text-white">NAVIGATE</div>
-                    <div className="text-[9px] text-neutral-400">Pinch & Hold</div>
-                  </div>
-               </div>
+               {/* Number Mode Button */}
+               <button
+                 onClick={() => {
+                   setIsNumberMode(true);
+                   setIsDialMode(false);
+                   setRecognizedNumber(0);
+                   handleLog('Switched to Number Mode', 'info');
+                 }}
+                 className={`
+                   flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 text-[10px] font-medium tracking-wide
+                   ${isNumberMode
+                     ? 'bg-amber-500/20 border border-amber-400/80 text-amber-200 shadow-[0_0_12px_rgba(251,191,36,0.3)]'
+                     : 'bg-transparent border border-amber-500/20 text-amber-400/60 hover:border-amber-400/40 hover:text-amber-300 hover:bg-amber-500/10'}
+                 `}
+               >
+                 <Hand className="w-3.5 h-3.5" />
+                 <span>NUMBER</span>
+               </button>
 
-               <div className="bg-neutral-900/50 border border-purple-500/30 px-3 rounded flex items-center gap-2">
-                  <div className="bg-purple-500/20 p-1.5 rounded text-purple-400"><Hand size={14} /></div>
-                  <div>
-                    <div className="text-[10px] font-bold text-white">DRAG</div>
-                    <div className="text-[9px] text-neutral-400">Pinch & Move</div>
-                  </div>
-               </div>
+               {/* Dial Mode Button */}
+               <button
+                 onClick={() => {
+                   setIsDialMode(true);
+                   setIsNumberMode(false);
+                   setDialValue(1);
+                   setDialAngle(0);
+                   handleLog('Switched to Dial Mode (1-100)', 'info');
+                 }}
+                 className={`
+                   flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 text-[10px] font-medium tracking-wide
+                   ${isDialMode
+                     ? 'bg-emerald-500/20 border border-emerald-400/80 text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                     : 'bg-transparent border border-emerald-500/20 text-emerald-400/60 hover:border-emerald-400/40 hover:text-emerald-300 hover:bg-emerald-500/10'}
+                 `}
+               >
+                 <Disc3 className="w-3.5 h-3.5" />
+                 <span>DIAL</span>
+               </button>
 
-               <div className="bg-neutral-900/50 border border-cyan-500/30 px-3 rounded flex items-center gap-2">
-                  <div className="bg-cyan-500/20 p-1.5 rounded text-cyan-400"><FileText size={14} /></div>
-                  <div>
-                    <div className="text-[10px] font-bold text-white">OPEN</div>
-                    <div className="text-[9px] text-neutral-400">Drag + Palm</div>
-                  </div>
-               </div>
-
-               <div className="bg-neutral-900/50 border border-cyan-500/30 px-3 rounded flex items-center gap-2">
-                  <div className="bg-cyan-500/20 p-1.5 rounded text-cyan-400"><Save size={14} /></div>
-                  <div>
-                    <div className="text-[10px] font-bold text-white">SAVE</div>
-                    <div className="text-[9px] text-neutral-400">Thumb Up</div>
-                  </div>
-               </div>
-
-               <div className="bg-neutral-900/50 border border-amber-500/30 px-3 rounded flex items-center gap-2">
-                  <div className="bg-amber-500/20 p-1.5 rounded text-amber-400"><RotateCcw size={14} /></div>
-                  <div>
-                    <div className="text-[10px] font-bold text-white">REVERT</div>
-                    <div className="text-[9px] text-neutral-400">Thumb Down</div>
-                  </div>
-               </div>
           </div>
         </div>
 

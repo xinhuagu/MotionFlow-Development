@@ -30,11 +30,9 @@ export const VideoHUD: React.FC<VideoHUDProps> = ({ videoRef, canvasRef, isConne
       {/* Grid Overlay */}
       <div className="absolute inset-0 bg-[linear-gradient(rgba(168,85,247,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(168,85,247,0.05)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
 
-      {/* HUD Corners */}
+      {/* HUD Corners - Top only */}
       <div className="absolute top-4 left-4 w-12 h-12 border-l-4 border-t-4 border-purple-500/80 rounded-tl-sm"></div>
       <div className="absolute top-4 right-4 w-12 h-12 border-r-4 border-t-4 border-purple-500/80 rounded-tr-sm"></div>
-      <div className="absolute bottom-4 left-4 w-12 h-12 border-l-4 border-b-4 border-purple-500/80 rounded-bl-sm"></div>
-      <div className="absolute bottom-4 right-4 w-12 h-12 border-r-4 border-b-4 border-purple-500/80 rounded-br-sm"></div>
 
       {/* Status Badges */}
       <div className="absolute top-6 left-8 flex flex-col gap-2 pointer-events-none">
@@ -48,14 +46,12 @@ export const VideoHUD: React.FC<VideoHUDProps> = ({ videoRef, canvasRef, isConne
          </div>
       </div>
 
-      {/* Detected Gesture Alert */}
+      {/* Detected Gesture Indicator - Small */}
       {gestureName && isConnected && (
-        <div className="absolute top-6 right-8 pointer-events-none animate-in fade-in slide-in-from-top-4 duration-300">
-          <div className="flex items-center gap-3 bg-purple-950/90 px-6 py-3 rounded border border-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.4)]">
-             <div className="w-2 h-2 bg-purple-400 rounded-full animate-ping" />
-             <span className="text-white font-mono font-bold tracking-widest text-lg">
-               &gt; {gestureName} DETECTED
-             </span>
+        <div className="absolute top-6 right-8 pointer-events-none">
+          <div className="flex items-center gap-1.5 bg-black/70 px-2.5 py-1 rounded border border-purple-500/50 text-[10px] font-mono text-purple-300">
+             <div className="w-1.5 h-1.5 bg-purple-400 rounded-full" />
+             <span>{gestureName}</span>
           </div>
         </div>
       )}

@@ -19,6 +19,8 @@ Count from 0 to 10 using dual-hand gestures.
 ### Mode 3: Dial Control (1-100)
 Rotate your open hand like a radio dial to select values from 1-100. Lock your selection with a second hand.
 
+![Dial Mode Demo](docs/images/dial.gif)
+
 ## Highlights
 
 - **100% Local** — Runs entirely in your browser, no cloud API required
