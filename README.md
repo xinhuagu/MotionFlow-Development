@@ -14,12 +14,12 @@ Navigate, browse, and edit code using natural hand movements.
 ### Mode 2: Number Recognition (0-10)
 Count from 0 to 10 using dual-hand gestures.
 
-![Number Counting Demo](docs/images/count.gif)
+<img src="docs/images/count.gif" width="480" alt="Number Counting Demo">
 
 ### Mode 3: Dial Control (1-100)
 Rotate your open hand like a radio dial to select values from 1-100. Lock your selection with a second hand.
 
-![Dial Mode Demo](docs/images/dial.gif)
+<img src="docs/images/dial.gif" width="480" alt="Dial Mode Demo">
 
 ## Highlights
 
