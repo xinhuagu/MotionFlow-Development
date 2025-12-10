@@ -302,23 +302,59 @@ export default function App() {
                />
              )}
 
-             {/* Video Toggle Button - Positioned above overlays */}
-             {isConnected && !isNumberMode && (
-               <button
-                 onClick={() => setShowVideo(prev => !prev)}
-                 className={`
-                   absolute bottom-4 right-4 z-[80] flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-300
-                   ${showVideo
-                     ? 'bg-purple-500/30 border border-purple-500/50 text-purple-300 hover:bg-purple-500/40'
-                     : 'bg-cyan-500/30 border border-cyan-500/50 text-cyan-300 hover:bg-cyan-500/40'}
-                 `}
-                 title={showVideo ? 'Hide camera video' : 'Show camera video'}
-               >
-                 {showVideo ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
-                 <span className="text-xs font-mono tracking-wider">
-                   {showVideo ? 'HIDE FACE' : 'SHOW FACE'}
-                 </span>
-               </button>
+             {/* Mode Switch Buttons - Positioned below camera */}
+             {isConnected && (
+               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[80] flex items-center gap-2">
+                 {/* File System Mode Button */}
+                 <button
+                   onClick={() => {
+                     setIsNumberMode(false);
+                     setRecognizedNumber(null);
+                     handleLog('Switched to File System mode', 'info');
+                   }}
+                   className={`
+                     flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 font-mono text-xs tracking-wider
+                     ${!isNumberMode
+                       ? 'bg-purple-500/50 border-2 border-purple-400 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]'
+                       : 'bg-neutral-800/50 border border-neutral-600 text-neutral-400 hover:bg-neutral-700/50 hover:text-neutral-300'}
+                   `}
+                 >
+                   <FolderOpen className="w-4 h-4" />
+                   FILE SYSTEM
+                 </button>
+
+                 {/* Number Mode Button */}
+                 <button
+                   onClick={() => {
+                     setIsNumberMode(true);
+                     setRecognizedNumber(0);
+                     handleLog('Switched to Number Mode', 'info');
+                   }}
+                   className={`
+                     flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 font-mono text-xs tracking-wider
+                     ${isNumberMode
+                       ? 'bg-amber-500/50 border-2 border-amber-400 text-white shadow-[0_0_15px_rgba(251,191,36,0.4)]'
+                       : 'bg-neutral-800/50 border border-neutral-600 text-neutral-400 hover:bg-neutral-700/50 hover:text-neutral-300'}
+                   `}
+                 >
+                   <Hand className="w-4 h-4" />
+                   NUMBER (0-10)
+                 </button>
+
+                 {/* Video Toggle Button */}
+                 <button
+                   onClick={() => setShowVideo(prev => !prev)}
+                   className={`
+                     flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-300
+                     ${showVideo
+                       ? 'bg-cyan-500/30 border border-cyan-500/50 text-cyan-300 hover:bg-cyan-500/40'
+                       : 'bg-neutral-800/50 border border-neutral-600 text-neutral-400 hover:bg-neutral-700/50'}
+                   `}
+                   title={showVideo ? 'Hide camera video' : 'Show camera video'}
+                 >
+                   {showVideo ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
+                 </button>
+               </div>
              )}
 
              {/* NUMBER MODE OVERLAY */}
