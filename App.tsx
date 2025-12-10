@@ -6,7 +6,7 @@ import { Terminal } from './components/Terminal';
 import { StatusPanel } from './components/StatusPanel';
 import { FileSystemInterface } from './components/FileSystemInterface';
 import { LogEntry } from './types';
-import { Power, ChevronRight, Hand, MousePointer2, X, FileText, Save, ZoomIn, Lock, MoveHorizontal, RotateCcw, ThumbsDown, ThumbsUp, Edit2, FolderOpen, Video, VideoOff } from 'lucide-react';
+import { Power, ChevronRight, Hand, MousePointer2, X, FileText, Save, ZoomIn, Lock, MoveHorizontal, RotateCcw, ThumbsDown, ThumbsUp, Edit2, FolderOpen, Video, VideoOff, Disc3 } from 'lucide-react';
 import { FILES_DB } from './constants';
 
 export default function App() {
@@ -33,6 +33,13 @@ export default function App() {
   // Number Mode State: German number gesture recognition
   const [isNumberMode, setIsNumberMode] = useState(false);
   const [recognizedNumber, setRecognizedNumber] = useState<number | null>(null);
+
+  // Dial Mode State: Rotation dial for 1-100
+  const [isDialMode, setIsDialMode] = useState(false);
+  const [dialValue, setDialValue] = useState(1);
+  const [dialAngle, setDialAngle] = useState(0); // Current rotation angle for visual
+  const [dialLocked, setDialLocked] = useState(false); // Locked state when second hand opens
+  const [dialLockTimer, setDialLockTimer] = useState<number | null>(null); // Lock countdown
 
   const handleLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
     setLogs(prev => [...prev, {
@@ -201,19 +208,33 @@ export default function App() {
         } catch (e) {
             handleLog(`Error deleting file: ${e}`, 'error');
         }
-    } else if (action === 'ENTER_NUMBER_MODE') {
-        setIsNumberMode(true);
-        setRecognizedNumber(0);
-        handleLog('Entered number recognition mode', 'info');
-    } else if (action === 'EXIT_NUMBER_MODE') {
-        setIsNumberMode(false);
-        setRecognizedNumber(null);
-        handleLog('Exited number recognition mode', 'info');
     } else if (action === 'NUMBER_DETECTED' && detail) {
         const num = Number.parseInt(detail);
         if (num !== recognizedNumber) {
             setRecognizedNumber(num);
             handleLog(`Number detected: ${num}`, 'success');
+        }
+    } else if (action === 'DIAL_ROTATE' && detail) {
+        const data = JSON.parse(detail);
+        setDialValue(data.value);
+        setDialAngle(data.angle);
+    } else if (action === 'DIAL_LOCK') {
+        if (!dialLocked) {
+            setDialLocked(true);
+            handleLog(`Dial locked at ${dialValue}`, 'success');
+            // Start 3 second countdown
+            let remaining = 3;
+            setDialLockTimer(remaining);
+            const interval = setInterval(() => {
+                remaining -= 1;
+                setDialLockTimer(remaining);
+                if (remaining <= 0) {
+                    clearInterval(interval);
+                    setDialLocked(false);
+                    setDialLockTimer(null);
+                    handleLog('Dial unlocked', 'info');
+                }
+            }, 1000);
         }
     } else {
        handleLog(`${action}: ${detail}`, 'cmd');
@@ -299,6 +320,8 @@ export default function App() {
                  isRenaming={!!renamingFile}
                  files={files}
                  isNumberMode={isNumberMode}
+                 isDialMode={isDialMode}
+                 dialLocked={dialLocked}
                />
              )}
 
@@ -309,12 +332,13 @@ export default function App() {
                  <button
                    onClick={() => {
                      setIsNumberMode(false);
+                     setIsDialMode(false);
                      setRecognizedNumber(null);
                      handleLog('Switched to File System mode', 'info');
                    }}
                    className={`
                      flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 font-mono text-xs tracking-wider
-                     ${!isNumberMode
+                     ${!isNumberMode && !isDialMode
                        ? 'bg-purple-500/50 border-2 border-purple-400 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]'
                        : 'bg-neutral-800/50 border border-neutral-600 text-neutral-400 hover:bg-neutral-700/50 hover:text-neutral-300'}
                    `}
@@ -327,6 +351,7 @@ export default function App() {
                  <button
                    onClick={() => {
                      setIsNumberMode(true);
+                     setIsDialMode(false);
                      setRecognizedNumber(0);
                      handleLog('Switched to Number Mode', 'info');
                    }}
@@ -339,6 +364,26 @@ export default function App() {
                  >
                    <Hand className="w-4 h-4" />
                    NUMBER (0-10)
+                 </button>
+
+                 {/* Dial Mode Button */}
+                 <button
+                   onClick={() => {
+                     setIsDialMode(true);
+                     setIsNumberMode(false);
+                     setDialValue(1);
+                     setDialAngle(0);
+                     handleLog('Switched to Dial Mode (1-100)', 'info');
+                   }}
+                   className={`
+                     flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-300 font-mono text-xs tracking-wider
+                     ${isDialMode
+                       ? 'bg-emerald-500/50 border-2 border-emerald-400 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]'
+                       : 'bg-neutral-800/50 border border-neutral-600 text-neutral-400 hover:bg-neutral-700/50 hover:text-neutral-300'}
+                   `}
+                 >
+                   <Disc3 className="w-4 h-4" />
+                   DIAL (1-100)
                  </button>
 
                  {/* Video Toggle Button */}
@@ -379,10 +424,122 @@ export default function App() {
                    <div className="text-neutral-400 text-sm mt-2 font-mono">
                      {recognizedNumber !== null && recognizedNumber > 0 ? `Both hands sum` : 'Show gesture(s)'}
                    </div>
+                 </div>
+               </div>
+             )}
 
-                   {/* Exit Instructions */}
-                   <div className="mt-4 bg-neutral-800/80 text-neutral-400 px-3 py-1.5 rounded text-xs font-mono">
-                     Bump fists twice to exit
+             {/* DIAL MODE OVERLAY */}
+             {isDialMode && (
+               <div className="absolute inset-0 z-[90] pointer-events-none flex items-center justify-center">
+                 {/* Radio Dial Interface */}
+                 <div className="flex flex-col items-center">
+                   {/* Mode Indicator */}
+                   <div className="bg-emerald-500/90 text-black px-4 py-1.5 rounded-full font-bold text-xs tracking-wider animate-pulse mb-6">
+                     DIAL MODE (1-100)
+                   </div>
+
+                   {/* Dial Container */}
+                   <div className="relative w-72 h-72">
+                     {/* Outer Ring with tick marks */}
+                     <svg className="absolute inset-0 w-full h-full" viewBox="0 0 288 288">
+                       {/* Background circle */}
+                       <circle cx="144" cy="144" r="140" fill="none" stroke="rgba(16,185,129,0.2)" strokeWidth="4" />
+
+                       {/* Tick marks - major every 10 */}
+                       {Array.from({ length: 100 }, (_, i) => {
+                         const angle = (i / 100) * 360 - 90;
+                         const rad = (angle * Math.PI) / 180;
+                         const isMajor = i % 10 === 0;
+                         const innerR = isMajor ? 118 : 125;
+                         const outerR = 135;
+                         const x1 = 144 + innerR * Math.cos(rad);
+                         const y1 = 144 + innerR * Math.sin(rad);
+                         const x2 = 144 + outerR * Math.cos(rad);
+                         const y2 = 144 + outerR * Math.sin(rad);
+                         return (
+                           <line
+                             key={i}
+                             x1={x1} y1={y1} x2={x2} y2={y2}
+                             stroke={i < dialValue ? '#10b981' : 'rgba(255,255,255,0.2)'}
+                             strokeWidth={isMajor ? 3 : 1}
+                           />
+                         );
+                       })}
+
+                       {/* Number labels */}
+                       {[0, 25, 50, 75, 100].map((num) => {
+                         const angle = (num / 100) * 360 - 90;
+                         const rad = (angle * Math.PI) / 180;
+                         const r = 100;
+                         const x = 144 + r * Math.cos(rad);
+                         const y = 144 + r * Math.sin(rad);
+                         return (
+                           <text
+                             key={num}
+                             x={x} y={y}
+                             fill={dialValue >= num ? '#10b981' : 'rgba(255,255,255,0.4)'}
+                             fontSize="12"
+                             fontFamily="monospace"
+                             textAnchor="middle"
+                             dominantBaseline="middle"
+                           >
+                             {num === 0 ? '1' : num}
+                           </text>
+                         );
+                       })}
+                     </svg>
+
+                     {/* Rotating Knob */}
+                     <div
+                       className={`absolute inset-8 rounded-full bg-gradient-to-br from-neutral-700 to-neutral-900 border-4 transition-all duration-100 ${
+                         dialLocked
+                           ? 'border-amber-500 shadow-[0_0_40px_rgba(251,191,36,0.5)]'
+                           : 'border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.3)]'
+                       }`}
+                       style={{ transform: `rotate(${dialAngle}deg)` }}
+                     >
+                       {/* Knob indicator line */}
+                       <div className={`absolute top-4 left-1/2 -translate-x-1/2 w-1 h-8 rounded-full ${
+                         dialLocked ? 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]' : 'bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.8)]'
+                       }`} />
+
+                       {/* Center cap */}
+                       <div className="absolute inset-12 rounded-full bg-gradient-to-br from-neutral-600 to-neutral-800 border border-neutral-600 flex items-center justify-center">
+                         <Disc3 className={`w-8 h-8 ${dialLocked ? 'text-amber-400/50' : 'text-emerald-400/50'}`} />
+                       </div>
+                     </div>
+
+                     {/* Value Display */}
+                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                       <div className={`bg-black/80 px-6 py-3 rounded-lg border transition-colors ${
+                         dialLocked ? 'border-amber-500/50' : 'border-emerald-500/30'
+                       }`}>
+                         <div className={`text-5xl font-bold font-mono tabular-nums ${
+                           dialLocked ? 'text-amber-400' : 'text-emerald-400'
+                         }`}>
+                           {dialValue}
+                         </div>
+                       </div>
+                     </div>
+
+                     {/* Lock indicator */}
+                     {dialLocked && (
+                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                         <div className="absolute top-2 bg-amber-500 text-black px-4 py-1 rounded-full font-bold text-sm animate-pulse">
+                           LOCKED {dialLockTimer !== null ? `(${dialLockTimer}s)` : ''}
+                         </div>
+                       </div>
+                     )}
+                   </div>
+
+                   {/* Instructions */}
+                   <div className="mt-6 flex flex-col items-center gap-2">
+                     <div className="text-neutral-400 text-sm font-mono">
+                       {dialLocked ? 'Value locked!' : 'Open hand and rotate to adjust'}
+                     </div>
+                     <div className="bg-neutral-800/80 text-neutral-400 px-3 py-1.5 rounded text-xs font-mono">
+                       {dialLocked ? 'Wait for unlock...' : 'Second hand open palm to lock'}
+                     </div>
                    </div>
                  </div>
                </div>

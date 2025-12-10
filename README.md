@@ -1,10 +1,10 @@
-# MotionFlow-Development (v0.0.1)
+# MotionFlow-Development (v0.0.2)
 
-Exploring the use of hand gesture motion in UI interaction. This project demonstrates two interaction modes powered by hand gesture recognition.
+Exploring the use of hand gesture motion in UI interaction. This project demonstrates three interaction modes powered by hand gesture recognition.
 
 > Built with AI-assisted development using Claude Code & Google Gemini
 
-## Two Modes
+## Three Modes
 
 ### Mode 1: File System Interface
 Navigate, browse, and edit code using natural hand movements.
@@ -12,14 +12,17 @@ Navigate, browse, and edit code using natural hand movements.
 ![Demo](docs/images/demo.gif)
 
 ### Mode 2: Number Recognition (0-10)
-Count from 0 to 10 using dual-hand gestures. Toggle with double clap.
+Count from 0 to 10 using dual-hand gestures.
 
 ![Number Counting Demo](docs/images/count.gif)
+
+### Mode 3: Dial Control (1-100)
+Rotate your open hand like a radio dial to select values from 1-100. Lock your selection with a second hand.
 
 ## Highlights
 
 - **100% Local** — Runs entirely in your browser, no cloud API required
-- **Dual-Mode Interface** — Switch between file system and number recognition
+- **Three-Mode Interface** — File system, number recognition, and dial control
 - **Zero Configuration** — Just `npm install` and start interacting
 
 ## Features
@@ -28,6 +31,7 @@ Count from 0 to 10 using dual-hand gestures. Toggle with double clap.
 - **Dual-Hand Orchestration** — Coordinate both hands: one positions, the other signals actions
 - **File Operations** — Open, edit, save, create, rename, and delete files with gestures
 - **Number Counting** — Recognize 0-10 using German or American finger counting styles
+- **Dial Control** — Rotate hand to select 1-100 with lock gesture
 - **Real-Time Tracking** — MediaPipe captures hand movements in real-time
 
 ## Quick Start
@@ -64,18 +68,23 @@ Open `http://localhost:3000` and allow camera access.
 
 ### Number Recognition Mode (0-10)
 
-| Gesture | Action | How To |
-|---------|--------|--------|
-| Clap x2 | Toggle number mode | Clap both hands together twice |
-
 **Dual-Hand Counting**: Numbers from both hands are summed together (0-10 range).
 
-| Style | 1 | 2 | 3 | 4 | 5 |
-|-------|---|---|---|---|---|
-| German (thumb first) | Thumb | Thumb+Index | +Middle | +Ring | All |
-| American (index first) | Index | Index+Middle | +Ring | +Pinky | All |
+| Style                   | 1     | 2            | 3       | 4       | 5   |
+|-------------------------|-------|--------------|---------|---------|-----|
+| German (thumb first)    | Thumb | Thumb+Index  | +Middle | +Ring   | All |
+| American (index first)  | Index | Index+Middle | +Ring   | +Pinky  | All |
 
 **Examples**: Left 3 + Right 2 = **5**, Left 5 + Right 5 = **10**, No hands = **0**
+
+### Dial Mode (1-100)
+
+| Gesture               | Action      | How To                                            |
+|-----------------------|-------------|---------------------------------------------------|
+| Open Hand + Rotate    | Adjust dial | Spread fingers and rotate wrist like turning knob |
+| Second Hand Open Palm | Lock value  | Show open palm with other hand to lock for 3s     |
+
+**How it works**: Open your hand with fingers spread, then rotate your wrist clockwise to increase or counter-clockwise to decrease. When you reach your target value, show an open palm with your other hand to lock the selection for 3 seconds.
 
 ## Tech Stack
 
@@ -173,8 +182,9 @@ Gestures used in this application:
 - `Closed_Fist` — Close file
 - `Thumb_Up` — Save file
 - `Thumb_Down` — Revert changes
-- `Clap x2` — Toggle number recognition mode (clap hands together twice)
 - `Number Gestures (0-10)` — Dual-hand counting, supports German (thumb-first) and American (index-first) styles
+- `Open Hand Rotate` — Dial mode: rotate wrist to adjust value (1-100)
+- `Second Hand Open Palm` — Lock dial value for 3 seconds
 
 ### 3. Spatial Mapping
 
@@ -191,6 +201,8 @@ Actions use a **progress-based activation** system:
 - Drag + Point (500ms) → Rename
 - Drag + Scissors cut → Delete
 - Gesture hold (1 second) → Save/Revert/Close
+- Hand rotation → Dial value adjustment (continuous)
+- Second hand open palm → Lock dial for 3 seconds
 
 This prevents accidental triggers and provides visual feedback via progress rings.
 

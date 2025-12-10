@@ -20,9 +20,11 @@ interface FileSystemInterfaceProps {
   isRenaming: boolean;
   files: FileItem[];
   isNumberMode?: boolean;
+  isDialMode?: boolean;
+  dialLocked?: boolean;
 }
 
-export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landmarks, gestures, containerRef, onAction, isFileOpen, isRenaming, files, isNumberMode = false }) => {
+export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landmarks, gestures, containerRef, onAction, isFileOpen, isRenaming, files, isNumberMode = false, isDialMode = false, dialLocked = false }) => {
   const [currentPath, setCurrentPath] = useState<string[]>([]); // Stack of folder IDs
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [activationProgress, setActivationProgress] = useState(0); // 0 to 100
@@ -67,16 +69,16 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     zoomStableStart: 0,
     isZoomLocked: false,
     dropCooldownUntil: 0,
-    // Fist Bump Detection State (for number mode toggle)
-    lastFistBumpTime: 0,
-    fistBumpCount: 0,
-    hadTwoHands: false,
-    lostDetectionTime: 0,
-    lastToggleTime: 0,
     // Number detection stability
     lastDetectedNumber: 0,
     numberStableStartTime: 0,
     confirmedNumber: 0,
+    // Dial mode state
+    dialBaseAngle: 0,
+    dialCurrentAngle: 0,
+    dialValue: 1,
+    dialPinching: false,
+    dialLastAngle: 0,
   });
 
   const getDistance = (p1: NormalizedLandmark, p2: NormalizedLandmark) => {
@@ -258,66 +260,6 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
     const primaryHand = landmarks[0];
     const primaryGesture = gestures[0] || 'None';
 
-    // --- FIST BUMP DETECTION (for number mode toggle) ---
-    // Detect when two hands collide by watching for detection loss
-    // Pattern: 2 hands -> lost detection -> 2 hands = 1 bump
-    // 2 bumps within 2 seconds = toggle
-    const BUMP_COOLDOWN = 1500; // 1.5s cooldown between toggles
-    const BUMP_WINDOW = 2500; // 2.5 second window for detecting 2 bumps
-    const LOST_DETECTION_MAX = 500; // Max time detection can be lost (ms)
-
-    const hasTwoHands = landmarks.length >= 2;
-
-    if (now - stateRef.current.lastToggleTime > BUMP_COOLDOWN) {
-      if (hasTwoHands) {
-        // We have two hands now
-        if (stateRef.current.lostDetectionTime > 0) {
-          // We just recovered from lost detection
-          const lostDuration = now - stateRef.current.lostDetectionTime;
-
-          // If detection was lost briefly (fist bump), count it
-          if (lostDuration < LOST_DETECTION_MAX && stateRef.current.hadTwoHands) {
-            // This was a bump!
-            if (stateRef.current.fistBumpCount === 0) {
-              // First bump
-              stateRef.current.fistBumpCount = 1;
-              stateRef.current.lastFistBumpTime = now;
-            } else if (now - stateRef.current.lastFistBumpTime < BUMP_WINDOW) {
-              // Second bump within window - toggle!
-              stateRef.current.fistBumpCount = 0;
-              stateRef.current.lastToggleTime = now;
-              if (isNumberMode) {
-                onAction?.("EXIT_NUMBER_MODE");
-              } else {
-                onAction?.("ENTER_NUMBER_MODE");
-              }
-            }
-          }
-          stateRef.current.lostDetectionTime = 0;
-        }
-        stateRef.current.hadTwoHands = true;
-      } else {
-        // Less than 2 hands detected
-        if (stateRef.current.hadTwoHands && stateRef.current.lostDetectionTime === 0) {
-          // Just lost detection - record the time
-          stateRef.current.lostDetectionTime = now;
-        } else if (stateRef.current.lostDetectionTime > 0) {
-          // Check if lost for too long
-          const lostDuration = now - stateRef.current.lostDetectionTime;
-          if (lostDuration > LOST_DETECTION_MAX) {
-            // Lost for too long, reset
-            stateRef.current.hadTwoHands = false;
-            stateRef.current.lostDetectionTime = 0;
-          }
-        }
-      }
-
-      // Reset bump count if too much time passed
-      if (stateRef.current.fistBumpCount > 0 && now - stateRef.current.lastFistBumpTime > BUMP_WINDOW) {
-        stateRef.current.fistBumpCount = 0;
-      }
-    }
-
     // --- NUMBER MODE ---
     if (isNumberMode) {
       // Detect numbers from both hands and sum them (allows 0-10)
@@ -347,6 +289,79 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
       }
 
       return; // Skip all other interactions in number mode
+    }
+
+    // --- DIAL MODE (rotation dial 1-100) ---
+    if (isDialMode) {
+      // Check if second hand is showing Open_Palm gesture to lock the dial
+      const secondHandGesture = gestures.length > 1 ? gestures[1] : 'None';
+      const isSecondHandOpenPalm = secondHandGesture === 'Open_Palm';
+
+      // If second hand opens palm, trigger lock
+      if (isSecondHandOpenPalm && !dialLocked) {
+        onAction?.("DIAL_LOCK");
+      }
+
+      // Get hand tracking data for angle calculation
+      const thumbTip = primaryHand[4];
+      const indexTip = primaryHand[8];
+      const middleTip = primaryHand[12];
+      const ringTip = primaryHand[16];
+      const pinkyTip = primaryHand[20];
+
+      // Check if hand is open (fingers spread)
+      const thumbPinkyDist = getDistance(thumbTip, pinkyTip);
+      const isOpenHand = thumbPinkyDist > 0.15;
+
+      if (isOpenHand) {
+        // Calculate center and angle
+        const centerX = (thumbTip.x + indexTip.x + middleTip.x + ringTip.x + pinkyTip.x) / 5;
+        const centerY = (thumbTip.y + indexTip.y + middleTip.y + ringTip.y + pinkyTip.y) / 5;
+        const dx = (1 - middleTip.x) - (1 - centerX);
+        const dy = middleTip.y - centerY;
+        const handAngle = Math.atan2(dx, -dy) * (180 / Math.PI);
+
+        if (!stateRef.current.dialPinching) {
+          // Just started tracking - record initial angle
+          stateRef.current.dialPinching = true;
+          stateRef.current.dialLastAngle = handAngle;
+        } else if (dialLocked) {
+          // While locked, just track hand angle without changing value
+          // This allows user to reposition hand during lock
+          stateRef.current.dialLastAngle = handAngle;
+        } else {
+          // Not locked - process rotation
+          let deltaAngle = handAngle - stateRef.current.dialLastAngle;
+
+          // Handle angle wrap-around
+          if (deltaAngle > 180) deltaAngle -= 360;
+          if (deltaAngle < -180) deltaAngle += 360;
+
+          // Only process if movement is significant (reduces jitter)
+          if (Math.abs(deltaAngle) > 1.0) {
+            stateRef.current.dialLastAngle = handAngle;
+
+            // Map rotation to value change
+            const rotationSensitivity = 0.8;
+            let newValue = Math.round(stateRef.current.dialValue + deltaAngle * rotationSensitivity);
+
+            // Clamp to 1-100
+            newValue = Math.max(1, Math.min(100, newValue));
+
+            if (newValue !== stateRef.current.dialValue) {
+              stateRef.current.dialValue = newValue;
+              // Calculate visual angle (maps 1-100 to 0-360 degrees)
+              const visualAngle = ((newValue - 1) / 99) * 360;
+              onAction?.("DIAL_ROTATE", JSON.stringify({ value: newValue, angle: visualAngle }));
+            }
+          }
+        }
+      } else {
+        // Hand closed - stop tracking
+        stateRef.current.dialPinching = false;
+      }
+
+      return; // Skip all other interactions in dial mode
     }
 
     // --- RENAME MODE GESTURE HANDLING ---
@@ -869,7 +884,7 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
         }
     }
 
-  }, [landmarks, gestures, currentPath, visibleFiles, floatingFile, actionStatus, onAction, isFileOpen, isRenaming, isNumberMode]);
+  }, [landmarks, gestures, currentPath, visibleFiles, floatingFile, actionStatus, onAction, isFileOpen, isRenaming, isNumberMode, isDialMode, dialLocked]);
 
   // --- RENDERING HELPERS ---
 
@@ -977,10 +992,10 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
   return (
     <div className="absolute inset-0 z-20 pointer-events-none font-sans select-none">
 
-      {/* Sidebar - Hidden when file is open or in number mode */}
+      {/* Sidebar - Hidden when file is open, in number mode, or dial mode */}
       <div className={`
         absolute left-0 top-0 bottom-0 w-[280px] bg-neutral-900/80 backdrop-blur-xl border-r border-white/10 flex flex-col transition-all duration-300
-        ${isFileOpen || isNumberMode ? '-translate-x-full opacity-0' : 'translate-x-0 opacity-100'}
+        ${isFileOpen || isNumberMode || isDialMode ? '-translate-x-full opacity-0' : 'translate-x-0 opacity-100'}
       `}>
 
         {/* Header */}
@@ -1041,8 +1056,8 @@ export const FileSystemInterface: React.FC<FileSystemInterfaceProps> = ({ landma
         </div>
       </div>
 
-      {/* Floating File - Hidden in number mode */}
-      {floatingFile && !isNumberMode && (
+      {/* Floating File - Hidden in number mode and dial mode */}
+      {floatingFile && !isNumberMode && !isDialMode && (
         <div
           className="absolute flex flex-col items-center justify-center z-50"
           style={{
