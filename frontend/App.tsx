@@ -1,13 +1,25 @@
 
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useLiveSession } from './hooks/useLiveSession';
 import { VideoHUD } from './components/VideoHUD';
 import { Terminal } from './components/Terminal';
 import { StatusPanel } from './components/StatusPanel';
 import { FileSystemInterface } from './components/FileSystemInterface';
 import { LogEntry } from './types';
-import { Power, ChevronRight, Hand, MousePointer2, X, FileText, Save, ZoomIn, Lock, MoveHorizontal, RotateCcw, ThumbsDown, ThumbsUp, Edit2, FolderOpen, Video, VideoOff, Disc3 } from 'lucide-react';
+import { Power, ChevronRight, Hand, MousePointer2, X, FileText, Save, ZoomIn, Lock, MoveHorizontal, RotateCcw, ThumbsDown, ThumbsUp, Edit2, FolderOpen, Video, VideoOff, Disc3, Database, Check, Ban, Download, Heart, FlaskConical } from 'lucide-react';
 import { FILES_DB } from './constants';
+import { normalizeLandmarksFrame, DTWClassifier } from './dynamicGesture';
+
+type RecordedSequenceSample = {
+  id: string;
+  label: string;
+  timeSteps: number;
+  featureSize: number;
+  sequence: number[][];
+  createdAt: string;
+};
+
+type RecordingState = 'idle' | 'recording' | 'review';
 
 export default function App() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -36,10 +48,32 @@ export default function App() {
 
   // Dial Mode State: Rotation dial for 1-100
   const [isDialMode, setIsDialMode] = useState(false);
+
+  // Gesture Test Mode State
+  const [isGestureTestMode, setIsGestureTestMode] = useState(false);
   const [dialValue, setDialValue] = useState(1);
   const [dialAngle, setDialAngle] = useState(0); // Current rotation angle for visual
   const [dialLocked, setDialLocked] = useState(false); // Locked state when second hand opens
   const [dialLockTimer, setDialLockTimer] = useState<number | null>(null); // Lock countdown
+
+  // Dynamic gesture dataset recorder (optional)
+  const [isRecorderOpen, setIsRecorderOpen] = useState(false);
+  const [recordingState, setRecordingState] = useState<RecordingState>('idle');
+  const [recordingLabel, setRecordingLabel] = useState('swipe_left');
+  const [recordingTimeSteps, setRecordingTimeSteps] = useState(30);
+  const [recordingFrames, setRecordingFrames] = useState<number[][]>([]);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [recordedSequence, setRecordedSequence] = useState<number[][] | null>(null);
+  const [datasetSamples, setDatasetSamples] = useState<RecordedSequenceSample[]>([]);
+
+  // DTW Dynamic Gesture Recognition
+  const [dtwClassifier, setDtwClassifier] = useState<DTWClassifier | null>(null);
+  const [dtwFrameBuffer, setDtwFrameBuffer] = useState<number[][]>([]);
+  const [detectedGesture, setDetectedGesture] = useState<{ label: string; confidence: number } | null>(null);
+  const [gestureDisplayTimer, setGestureDisplayTimer] = useState<number | null>(null);
+  const [testModeSimilarity, setTestModeSimilarity] = useState<number>(0);
+  const lastGestureTimeRef = useRef<number>(0);
+  const DTW_TIME_STEPS = 30;
 
   const handleLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
     setLogs(prev => [...prev, {
@@ -50,11 +84,183 @@ export default function App() {
     }]);
   }, []);
 
-  const { connect, disconnect, isConnected, gestures, landmarks } = useLiveSession({ 
-    onLog: handleLog, 
+  const { connect, disconnect, isConnected, gestures, landmarks } = useLiveSession({
+    onLog: handleLog,
     videoRef,
     canvasRef
   });
+
+  // Load DTW classifier on mount
+  useEffect(() => {
+    const loadClassifier = async () => {
+      try {
+        const classifier = new DTWClassifier({
+          threshold: 0.35,
+          maxTemplatesPerLabel: 20,
+          distanceScale: 0.8,
+        });
+        await classifier.loadFromUrl('/models/gesture_templates.json');
+        setDtwClassifier(classifier);
+        handleLog(`DTW classifier loaded: ${classifier.getTemplateCount()} templates`, 'success');
+      } catch (err) {
+        console.warn('Failed to load DTW classifier:', err);
+      }
+    };
+    loadClassifier();
+  }, [handleLog]);
+
+  // DTW gesture detection - ONLY in Gesture Test Mode
+  useEffect(() => {
+    // Only run in gesture test mode
+    if (!isGestureTestMode) {
+      // Clear buffer and state when leaving test mode
+      if (dtwFrameBuffer.length > 0) setDtwFrameBuffer([]);
+      if (testModeSimilarity > 0) setTestModeSimilarity(0);
+      if (detectedGesture) setDetectedGesture(null);
+      return;
+    }
+
+    if (!dtwClassifier || !isConnected) return;
+
+    const primaryHand = landmarks?.[0];
+    if (!primaryHand) {
+      // No hand detected - reset everything to zero
+      if (dtwFrameBuffer.length > 0) setDtwFrameBuffer([]);
+      if (testModeSimilarity > 0) setTestModeSimilarity(0);
+      if (detectedGesture) setDetectedGesture(null);
+      return;
+    }
+
+    // Use same normalization as recording
+    const frame = normalizeLandmarksFrame(primaryHand);
+    if (!frame) return;
+
+    setDtwFrameBuffer(prev => {
+      const next = [...prev, frame];
+      if (next.length > DTW_TIME_STEPS) next.shift();
+      return next;
+    });
+  }, [isGestureTestMode, dtwClassifier, isConnected, landmarks, dtwFrameBuffer.length, testModeSimilarity, detectedGesture]);
+
+  // DTW gesture matching - ONLY in Gesture Test Mode
+  useEffect(() => {
+    if (!isGestureTestMode) return;
+    if (!dtwClassifier || dtwFrameBuffer.length < DTW_TIME_STEPS) return;
+
+    dtwClassifier.match(dtwFrameBuffer).then(result => {
+      setTestModeSimilarity(result?.similarity ?? 0);
+      if (result && result.similarity >= 0.35) {
+        setDetectedGesture({ label: result.label, confidence: result.similarity });
+      } else {
+        setDetectedGesture(null);
+      }
+    });
+  }, [isGestureTestMode, dtwClassifier, dtwFrameBuffer]);
+
+  const datasetSummary = useMemo(() => {
+    const byLabel = new Map<string, number>();
+    for (const s of datasetSamples) byLabel.set(s.label, (byLabel.get(s.label) ?? 0) + 1);
+    return Array.from(byLabel.entries()).sort((a, b) => b[1] - a[1]);
+  }, [datasetSamples]);
+
+  useEffect(() => {
+    if (!isRecorderOpen) return;
+    if (recordingState !== 'recording') return;
+
+    const primaryHand = landmarks?.[0];
+    if (!primaryHand) {
+      setRecordingError('No hand detected. Keep your hand in view.');
+      return;
+    }
+
+    const frame = normalizeLandmarksFrame(primaryHand);
+    if (!frame) return;
+
+    setRecordingError(null);
+    setRecordingFrames(prev => {
+      if (prev.length >= recordingTimeSteps) return prev;
+      return [...prev, frame];
+    });
+  }, [isRecorderOpen, recordingState, landmarks, recordingTimeSteps]);
+
+  useEffect(() => {
+    if (recordingState !== 'recording') return;
+    if (recordingFrames.length < recordingTimeSteps) return;
+
+    setRecordedSequence(recordingFrames.slice(0, recordingTimeSteps));
+    setRecordingFrames([]);
+    setRecordingState('review');
+  }, [recordingFrames, recordingState, recordingTimeSteps]);
+
+  const downloadJson = useCallback((filename: string, data: unknown) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const resetRecorder = useCallback(() => {
+    setRecordingState('idle');
+    setRecordingFrames([]);
+    setRecordedSequence(null);
+    setRecordingError(null);
+  }, []);
+
+  const startRecording = useCallback(() => {
+    if (!isConnected) {
+      setRecordingError('Connect the vision system before recording.');
+      return;
+    }
+    setRecordingError(null);
+    setRecordingFrames([]);
+    setRecordedSequence(null);
+    setRecordingState('recording');
+  }, [isConnected]);
+
+  const stopRecording = useCallback(() => {
+    if (recordingState !== 'recording') return;
+    const seq = recordingFrames.slice(0, recordingTimeSteps);
+    setRecordedSequence(seq.length === recordingTimeSteps ? seq : null);
+    setRecordingFrames([]);
+    setRecordingError(seq.length === recordingTimeSteps ? null : 'Not enough frames captured. Discard and retry.');
+    setRecordingState('review');
+  }, [recordingFrames, recordingState, recordingTimeSteps]);
+
+  const acceptRecording = useCallback(() => {
+    if (!recordedSequence) return;
+    const sample: RecordedSequenceSample = {
+      id: Math.random().toString(36).slice(2),
+      label: recordingLabel.trim() || 'unknown',
+      timeSteps: recordingTimeSteps,
+      featureSize: recordedSequence[0]?.length ?? 0,
+      sequence: recordedSequence,
+      createdAt: new Date().toISOString(),
+    };
+    setDatasetSamples(prev => [...prev, sample]);
+    resetRecorder();
+    handleLog(`Recorded dynamic gesture sample: ${sample.label}`, 'success');
+  }, [handleLog, recordedSequence, recordingLabel, recordingTimeSteps, resetRecorder]);
+
+  const discardRecording = useCallback(() => {
+    resetRecorder();
+    handleLog('Discarded recording', 'warning');
+  }, [handleLog, resetRecorder]);
+
+  const downloadDataset = useCallback(() => {
+    const payload = {
+      format: 'motionflow.dynamic_gesture.v1',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      notes: 'Copy this file into ml/data/raw/ for training.',
+      samples: datasetSamples,
+    };
+    downloadJson(`motionflow_dynamic_gesture_dataset_${Date.now()}.json`, payload);
+  }, [datasetSamples, downloadJson]);
 
   const handleFileSystemAction = (action: string, detail?: string) => {
     if (action === 'OPEN_FILE' && detail) {
@@ -276,19 +482,33 @@ export default function App() {
             <p className="text-[10px] text-neutral-400 tracking-[0.2em] uppercase font-mono">SPATIAL ORCHESTRATOR</p>
           </div>
         </div>
-        
-        <button
-          onClick={toggleConnection}
-          className={`
-            flex items-center gap-2 px-6 py-2 rounded font-bold tracking-wide transition-all duration-300 text-sm
-            ${isConnected 
-              ? 'bg-neutral-900 text-red-400 border border-red-500/50 hover:bg-neutral-800' 
-              : 'bg-[#A100FF] text-white hover:bg-[#8a00db] shadow-[0_0_15px_rgba(161,0,255,0.4)]'}
-          `}
-        >
-          <Power className="w-4 h-4" />
-          {isConnected ? 'TERMINATE' : 'INITIALIZE'}
-        </button>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setIsRecorderOpen(true);
+              resetRecorder();
+            }}
+            className="flex items-center gap-2 px-4 py-2 rounded font-bold tracking-wide transition-all duration-300 text-sm bg-neutral-900 text-cyan-300 border border-cyan-500/30 hover:bg-neutral-800 hover:border-cyan-400/50"
+            title="Open dynamic gesture dataset recorder"
+          >
+            <Database className="w-4 h-4" />
+            NEW MODEL
+          </button>
+
+          <button
+            onClick={toggleConnection}
+            className={`
+              flex items-center gap-2 px-6 py-2 rounded font-bold tracking-wide transition-all duration-300 text-sm
+              ${isConnected 
+                ? 'bg-neutral-900 text-red-400 border border-red-500/50 hover:bg-neutral-800' 
+                : 'bg-[#A100FF] text-white hover:bg-[#8a00db] shadow-[0_0_15px_rgba(161,0,255,0.4)]'}
+            `}
+          >
+            <Power className="w-4 h-4" />
+            {isConnected ? 'TERMINATE' : 'INITIALIZE'}
+          </button>
+        </div>
       </header>
 
       {/* Main Content Grid */}
@@ -309,8 +529,8 @@ export default function App() {
                 />
              </div>
              
-             {/* Spatial File System Overlay */}
-             {isConnected && (
+             {/* Spatial File System Overlay - NOT in Gesture Test Mode */}
+             {isConnected && !isGestureTestMode && (
                <FileSystemInterface
                  landmarks={landmarks}
                  gestures={gestures}
@@ -344,8 +564,8 @@ export default function App() {
                </button>
              )}
 
-             {/* NUMBER MODE OVERLAY */}
-             {isNumberMode && (
+             {/* NUMBER MODE OVERLAY - NOT in Gesture Test Mode */}
+             {isNumberMode && !isGestureTestMode && (
                <div className="absolute inset-0 z-[90] pointer-events-none">
                  {/* Left Side Number Display */}
                  <div className="absolute left-8 top-1/2 -translate-y-1/2 flex flex-col items-center">
@@ -370,8 +590,8 @@ export default function App() {
                </div>
              )}
 
-             {/* DIAL MODE OVERLAY */}
-             {isDialMode && (
+             {/* DIAL MODE OVERLAY - NOT in Gesture Test Mode */}
+             {isDialMode && !isGestureTestMode && (
                <div className="absolute inset-0 z-[90] pointer-events-none flex items-center justify-center">
                  {/* Vertical Volume Bar - Far Left */}
                  <div className="absolute left-8 top-1/2 -translate-y-1/2 w-8 h-72 rounded-full bg-neutral-800/80 border border-neutral-600 overflow-hidden">
@@ -508,8 +728,99 @@ export default function App() {
                </div>
              )}
 
-             {/* CODE VIEWER MODAL */}
-             {activeFile && (
+             {/* GESTURE TEST MODE OVERLAY */}
+             {isGestureTestMode && (
+               <div className="absolute inset-0 z-[90] pointer-events-none">
+                 {/* Center Test Interface */}
+                 <div className="absolute inset-0 flex items-center justify-center">
+                   <div className="flex flex-col items-center gap-6">
+                     {/* Mode Indicator */}
+                     <div className="bg-pink-500/90 text-white px-4 py-1.5 rounded-full font-bold text-xs tracking-wider animate-pulse">
+                       GESTURE TEST MODE
+                     </div>
+
+                     {/* Main Display */}
+                     <div className="relative w-80 h-80 flex items-center justify-center">
+                       {/* Circular Progress Ring */}
+                       <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 320 320">
+                         {/* Background circle */}
+                         <circle
+                           cx="160" cy="160" r="140"
+                           fill="none"
+                           stroke="rgba(236,72,153,0.2)"
+                           strokeWidth="12"
+                         />
+                         {/* Progress circle */}
+                         <circle
+                           cx="160" cy="160" r="140"
+                           fill="none"
+                           stroke={testModeSimilarity >= 0.35 ? '#ec4899' : 'rgba(236,72,153,0.5)'}
+                           strokeWidth="12"
+                           strokeLinecap="round"
+                           strokeDasharray={`${testModeSimilarity * 880} 880`}
+                           className="transition-all duration-200"
+                         />
+                       </svg>
+
+                       {/* Center Content */}
+                       <div className="flex flex-col items-center gap-2 z-10">
+                         {detectedGesture ? (
+                           <div className="flex flex-col items-center">
+                             <div className="text-pink-400 font-bold text-4xl uppercase tracking-wider animate-pulse">
+                               {detectedGesture.label}
+                             </div>
+                             <div className="text-pink-300 text-sm font-mono mt-2">
+                               DETECTED!
+                             </div>
+                           </div>
+                         ) : (
+                           <div className="flex flex-col items-center">
+                             <div className="text-pink-300/40 font-bold text-2xl uppercase tracking-wider">
+                               WAITING
+                             </div>
+                             <div className="text-pink-300/30 text-xs font-mono mt-1">
+                               Perform gesture...
+                             </div>
+                           </div>
+                         )}
+                       </div>
+                     </div>
+
+                     {/* Stats Display */}
+                     <div className="flex items-center gap-6 bg-black/40 backdrop-blur-sm rounded-lg px-6 py-3 border border-pink-500/30">
+                       <div className="flex flex-col items-center">
+                         <span className="text-[10px] text-pink-300/60 font-mono">BUFFER</span>
+                         <span className="text-2xl font-bold text-pink-300 font-mono">
+                           {dtwFrameBuffer.length}/{DTW_TIME_STEPS}
+                         </span>
+                       </div>
+                       <div className="w-px h-10 bg-pink-500/30" />
+                       <div className="flex flex-col items-center">
+                         <span className="text-[10px] text-pink-300/60 font-mono">SIMILARITY</span>
+                         <span className={`text-2xl font-bold font-mono ${testModeSimilarity >= 0.35 ? 'text-pink-400' : 'text-pink-300/50'}`}>
+                           {(testModeSimilarity * 100).toFixed(0)}%
+                         </span>
+                       </div>
+                       <div className="w-px h-10 bg-pink-500/30" />
+                       <div className="flex flex-col items-center">
+                         <span className="text-[10px] text-pink-300/60 font-mono">THRESHOLD</span>
+                         <span className="text-2xl font-bold text-pink-300/70 font-mono">35%</span>
+                       </div>
+                     </div>
+
+                     {/* Instructions */}
+                     <div className="text-pink-300/60 text-xs font-mono text-center max-w-xs">
+                       Perform a trained gesture to test recognition.
+                       <br />
+                       Similarity must exceed threshold to trigger.
+                     </div>
+                   </div>
+                 </div>
+               </div>
+             )}
+
+             {/* CODE VIEWER MODAL - NOT in Gesture Test Mode */}
+             {activeFile && !isGestureTestMode && (
                <div className="absolute inset-0 z-[60] flex items-center justify-center p-8 bg-black/5 backdrop-blur-sm animate-in zoom-in-95 duration-200">
                   <div className={`
                     w-full h-full max-w-4xl bg-neutral-900/10 backdrop-blur-md border rounded-lg shadow-2xl flex flex-col overflow-hidden transition-colors duration-300
@@ -581,8 +892,8 @@ export default function App() {
                </div>
              )}
 
-             {/* RENAME FILE MODAL */}
-             {renamingFile && (
+             {/* RENAME FILE MODAL - NOT in Gesture Test Mode */}
+             {renamingFile && !isGestureTestMode && (
                <div className="absolute inset-0 z-[70] flex items-center justify-center p-8 bg-black/60 backdrop-blur-sm animate-in zoom-in-95 duration-200">
                   <div className="w-full max-w-md bg-neutral-900/95 backdrop-blur-md border border-amber-500/50 rounded-lg shadow-2xl flex flex-col overflow-hidden">
                      {/* Modal Header */}
@@ -638,6 +949,180 @@ export default function App() {
                   </div>
                </div>
              )}
+
+             {/* DYNAMIC GESTURE DATASET RECORDER - NOT in Gesture Test Mode */}
+             {isRecorderOpen && !isGestureTestMode && (
+               <div className="absolute inset-0 z-[90] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in zoom-in-95 duration-200">
+                 <div className="w-full max-w-2xl bg-neutral-900/95 backdrop-blur-md border border-cyan-500/40 rounded-lg shadow-2xl flex flex-col overflow-hidden">
+                   <div className="h-12 flex-none bg-black/30 border-b border-cyan-900/30 flex items-center justify-between px-4">
+                     <div className="flex items-center gap-2 text-cyan-300">
+                       <Database size={16} />
+                       <span className="font-mono text-sm font-bold">DYNAMIC GESTURE RECORDER</span>
+                     </div>
+                     <button
+                       onClick={() => {
+                         setIsRecorderOpen(false);
+                         resetRecorder();
+                       }}
+                       className="hover:bg-red-500/20 hover:text-red-400 p-1 rounded transition-colors"
+                       title="Close"
+                     >
+                       <X size={16} />
+                     </button>
+                   </div>
+
+                   <div className="p-4 space-y-4">
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                       <div className="md:col-span-2">
+                         <label className="block text-[10px] text-neutral-400 font-mono mb-1">LABEL</label>
+                         <input
+                           value={recordingLabel}
+                           onChange={(e) => setRecordingLabel(e.target.value)}
+                           className="w-full bg-black/30 border border-neutral-700 rounded px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-cyan-400/60"
+                           placeholder="e.g. swipe_left"
+                         />
+                       </div>
+                       <div>
+                         <label className="block text-[10px] text-neutral-400 font-mono mb-1">TIME STEPS</label>
+                         <input
+                           type="number"
+                           min={5}
+                           max={120}
+                           value={recordingTimeSteps}
+                           onChange={(e) => setRecordingTimeSteps(Number.parseInt(e.target.value || '30', 10))}
+                           className="w-full bg-black/30 border border-neutral-700 rounded px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-cyan-400/60"
+                         />
+                       </div>
+                     </div>
+
+                     <div className="flex items-center justify-between gap-3 bg-black/20 border border-neutral-800 rounded p-3">
+                       <div className="flex items-center gap-3">
+                         <div className="text-xs font-mono text-neutral-300">
+                           STATE: <span className="text-white font-bold">{recordingState.toUpperCase()}</span>
+                         </div>
+                         <div className="text-xs font-mono text-neutral-300">
+                           FRAMES: <span className="text-cyan-300 font-bold">
+                             {recordingState === 'recording' ? recordingFrames.length : (recordedSequence?.length ?? 0)}
+                           </span>
+                           <span className="text-neutral-500"> / {recordingTimeSteps}</span>
+                         </div>
+                         <div className={`text-[10px] font-mono ${isConnected ? 'text-green-400' : 'text-neutral-500'}`}>
+                           SYSTEM: {isConnected ? 'ONLINE' : 'OFFLINE'}
+                         </div>
+                       </div>
+
+                       <div className="flex items-center gap-2">
+                         {recordingState !== 'recording' ? (
+                           <button
+                             onClick={startRecording}
+                             className="flex items-center gap-2 px-3 py-2 rounded bg-cyan-500/20 border border-cyan-400/40 text-cyan-200 hover:bg-cyan-500/30 transition-colors text-xs font-bold"
+                           >
+                             <Hand className="w-4 h-4" />
+                             START
+                           </button>
+                         ) : (
+                           <button
+                             onClick={stopRecording}
+                             className="flex items-center gap-2 px-3 py-2 rounded bg-red-500/20 border border-red-400/40 text-red-200 hover:bg-red-500/30 transition-colors text-xs font-bold"
+                           >
+                             <Ban className="w-4 h-4" />
+                             STOP
+                           </button>
+                         )}
+                       </div>
+                     </div>
+
+                     {recordingError && (
+                       <div className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded p-3 font-mono">
+                         {recordingError}
+                       </div>
+                     )}
+
+                     {recordingState === 'review' && (
+                       <div className="flex items-center justify-between gap-3 bg-black/20 border border-neutral-800 rounded p-3">
+                         <div className="text-xs font-mono text-neutral-300">
+                           Keep this sample?
+                         </div>
+                         <div className="flex items-center gap-2">
+                           <button
+                             onClick={acceptRecording}
+                             disabled={!recordedSequence}
+                             className={`flex items-center gap-2 px-3 py-2 rounded border transition-colors text-xs font-bold ${
+                               recordedSequence
+                                 ? 'bg-green-500/20 border-green-400/40 text-green-200 hover:bg-green-500/30'
+                                 : 'bg-neutral-800 border-neutral-700 text-neutral-500 cursor-not-allowed'
+                             }`}
+                           >
+                             <Check className="w-4 h-4" />
+                             YES (KEEP)
+                           </button>
+                           <button
+                             onClick={discardRecording}
+                             className="flex items-center gap-2 px-3 py-2 rounded bg-neutral-800 border border-neutral-700 text-neutral-200 hover:bg-neutral-700 transition-colors text-xs font-bold"
+                           >
+                             <Ban className="w-4 h-4" />
+                             NO (DISCARD)
+                           </button>
+                         </div>
+                       </div>
+                     )}
+
+                     <div className="flex items-center justify-between gap-3">
+                       <div className="text-[10px] text-neutral-500 font-mono">
+                         Download dataset JSON and copy it into <span className="text-neutral-300">ml/data/raw/</span>.
+                       </div>
+                       <div className="flex items-center gap-2">
+                         <button
+                           onClick={() => setDatasetSamples([])}
+                           disabled={datasetSamples.length === 0}
+                           className={`px-3 py-2 rounded border transition-colors text-xs font-bold ${
+                             datasetSamples.length > 0
+                               ? 'bg-neutral-800 border-neutral-700 text-neutral-200 hover:bg-neutral-700'
+                               : 'bg-neutral-900 border-neutral-800 text-neutral-600 cursor-not-allowed'
+                           }`}
+                         >
+                           CLEAR
+                         </button>
+                         <button
+                           onClick={downloadDataset}
+                           disabled={datasetSamples.length === 0}
+                           className={`flex items-center gap-2 px-3 py-2 rounded border transition-colors text-xs font-bold ${
+                             datasetSamples.length > 0
+                               ? 'bg-purple-500/20 border-purple-400/40 text-purple-200 hover:bg-purple-500/30'
+                               : 'bg-neutral-900 border-neutral-800 text-neutral-600 cursor-not-allowed'
+                           }`}
+                         >
+                           <Download className="w-4 h-4" />
+                           DOWNLOAD ({datasetSamples.length})
+                         </button>
+                       </div>
+                     </div>
+
+                     {datasetSummary.length > 0 && (
+                       <div className="bg-black/20 border border-neutral-800 rounded p-3">
+                         <div className="text-[10px] text-neutral-400 font-mono mb-2">LABEL COUNTS</div>
+                         <div className="flex flex-wrap gap-2">
+                           {datasetSummary.map(([label, count]) => (
+                             <div key={label} className="text-xs font-mono bg-neutral-800/60 border border-neutral-700 rounded px-2 py-1 text-neutral-200">
+                               {label}: <span className="text-cyan-300 font-bold">{count}</span>
+                             </div>
+                           ))}
+                         </div>
+                       </div>
+                     )}
+                   </div>
+
+                   <div className="h-10 flex-none bg-black/30 border-t border-cyan-900/30 flex items-center justify-between px-4 text-[10px] text-neutral-400 font-mono">
+                     <div className="flex items-center gap-3">
+                       <span>FEATURES: 63 (21 landmarks × xyz)</span>
+                       <span className="text-neutral-600">|</span>
+                       <span>NORMALIZATION: wrist-relative + scale</span>
+                     </div>
+                     <span className="text-neutral-500">No runtime backend. Offline training only.</span>
+                   </div>
+                 </div>
+               </div>
+             )}
           </div>
           
           {/* Mode Switch Buttons */}
@@ -647,12 +1132,13 @@ export default function App() {
                  onClick={() => {
                    setIsNumberMode(false);
                    setIsDialMode(false);
+                   setIsGestureTestMode(false);
                    setRecognizedNumber(null);
                    handleLog('Switched to File System mode', 'info');
                  }}
                  className={`
                    flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 text-[10px] font-medium tracking-wide
-                   ${!isNumberMode && !isDialMode
+                   ${!isNumberMode && !isDialMode && !isGestureTestMode
                      ? 'bg-purple-500/20 border border-purple-400/80 text-purple-200 shadow-[0_0_12px_rgba(168,85,247,0.3)]'
                      : 'bg-transparent border border-purple-500/20 text-purple-400/60 hover:border-purple-400/40 hover:text-purple-300 hover:bg-purple-500/10'}
                  `}
@@ -666,6 +1152,7 @@ export default function App() {
                  onClick={() => {
                    setIsNumberMode(true);
                    setIsDialMode(false);
+                   setIsGestureTestMode(false);
                    setRecognizedNumber(0);
                    handleLog('Switched to Number Mode', 'info');
                  }}
@@ -685,6 +1172,7 @@ export default function App() {
                  onClick={() => {
                    setIsDialMode(true);
                    setIsNumberMode(false);
+                   setIsGestureTestMode(false);
                    setDialValue(1);
                    setDialAngle(0);
                    handleLog('Switched to Dial Mode (1-100)', 'info');
@@ -698,6 +1186,27 @@ export default function App() {
                >
                  <Disc3 className="w-3.5 h-3.5" />
                  <span>DIAL</span>
+               </button>
+
+               {/* Gesture Test Mode Button */}
+               <button
+                 onClick={() => {
+                   setIsGestureTestMode(true);
+                   setIsNumberMode(false);
+                   setIsDialMode(false);
+                   setDetectedGesture(null);
+                   setTestModeSimilarity(0);
+                   handleLog('Switched to Gesture Test Mode', 'info');
+                 }}
+                 className={`
+                   flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-200 text-[10px] font-medium tracking-wide
+                   ${isGestureTestMode
+                     ? 'bg-pink-500/20 border border-pink-400/80 text-pink-200 shadow-[0_0_12px_rgba(236,72,153,0.3)]'
+                     : 'bg-transparent border border-pink-500/20 text-pink-400/60 hover:border-pink-400/40 hover:text-pink-300 hover:bg-pink-500/10'}
+                 `}
+               >
+                 <FlaskConical className="w-3.5 h-3.5" />
+                 <span>GESTURE</span>
                </button>
 
           </div>
