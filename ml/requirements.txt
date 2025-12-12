@@ -1,0 +1,5 @@
+# Keep this minimal; pin later when the training pipeline is implemented.
+tensorflow>=2.15
+tensorflowjs>=4.0
+numpy>=1.26
+
