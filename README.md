@@ -26,6 +26,8 @@ Rotate your open hand like a radio dial to select values from 1-100. Lock your s
 ### Mode 4: Gesture Test Mode
 Test and debug custom trained dynamic gestures with real-time similarity feedback.
 
+<img src="docs/images/test.gif" width="480" alt="Gesture Test Mode Demo">
+
 Features:
 - Real-time DTW (Dynamic Time Warping) similarity score
 - Visual buffer progress indicator
