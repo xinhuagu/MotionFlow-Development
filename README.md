@@ -211,15 +211,18 @@ This prevents accidental triggers and provides visual feedback via progress ring
 ## Project Structure
 
 ```
-├── App.tsx                 # Main app, state management
-├── constants.ts            # Mock file system data
-├── hooks/
-│   └── useLiveSession.ts   # MediaPipe integration
-└── components/
-    ├── FileSystemInterface # Gesture-to-action logic
-    ├── VideoHUD            # Camera feed overlay
-    ├── Terminal            # Action logger
-    └── StatusPanel         # System metrics
+├── frontend/
+│   ├── App.tsx                 # Main app, state management
+│   ├── constants.ts            # Mock file system data
+│   ├── hooks/
+│   │   └── useLiveSession.ts   # MediaPipe integration
+│   ├── components/
+│   │   ├── FileSystemInterface # Gesture-to-action logic
+│   │   ├── VideoHUD            # Camera feed overlay
+│   │   ├── Terminal            # Action logger
+│   │   └── StatusPanel         # System metrics
+│   └── dynamicGesture/         # (Optional) dynamic gesture scaffolding
+└── ml/                         # Offline training/export only (Python)
 ```
 
 ## Requirements

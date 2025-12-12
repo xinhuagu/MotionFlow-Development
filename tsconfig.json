@@ -1,4 +1,14 @@
 {
+  "include": [
+    "frontend/**/*",
+    "vite.config.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "frontend/dist",
+    "ml"
+  ],
   "compilerOptions": {
     "target": "ES2022",
     "experimentalDecorators": true,
@@ -18,9 +28,10 @@
     "moduleDetection": "force",
     "allowJs": true,
     "jsx": "react-jsx",
+    "baseUrl": ".",
     "paths": {
       "@/*": [
-        "./*"
+        "./frontend/*"
       ]
     },
     "allowImportingTsExtensions": true,
