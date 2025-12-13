@@ -113,12 +113,15 @@ const DTW_DISTANCE_SCALE = 0.8;   // Similarity conversion scale
 
 See `.claude/rules/` for detailed guidelines:
 
-| File | Scope | Content |
-|------|-------|---------|
-| `typescript.md` | `frontend/**/*.{ts,tsx}` | Naming, types, imports |
-| `react.md` | `frontend/**/*.tsx` | Components, hooks, state |
-| `python.md` | `ml/**/*.py` | PEP 8, type hints, ML practices |
-| `gesture-module.md` | `frontend/dynamicGesture/**/*.ts` | DTW specifics |
+```
+.claude/rules/
+├── frontend/
+│   ├── typescript.md      # frontend/**/*.{ts,tsx}
+│   ├── react.md           # frontend/**/*.tsx
+│   └── gesture-module.md  # frontend/dynamicGesture/**/*.ts
+└── ml/
+    └── python.md          # ml/**/*.py
+```
 
 ### Quick Reference
 
